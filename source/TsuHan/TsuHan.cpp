@@ -112,7 +112,7 @@ void HGMHandler(
 		const Chunk& CurChunk
 			= *reinterpret_cast<const Chunk*>(FileData.data());
 
-		const std::span<const std::byte> CurChunkData
+		std::span<const std::byte> CurChunkData
 			= FileData.subspan(sizeof(Chunk), CurChunk.Size);
 
 		std::printf("%s(%u)\n", ToString(CurChunk.Tag), CurChunk.Size);
@@ -123,6 +123,66 @@ void HGMHandler(
 		{
 		case TagID::Geometry:
 		{
+			// slllllll
+			struct GeometryHeader
+			{
+				char          String[256] = {};
+				std::uint32_t UnknownA;
+				std::uint32_t UnknownB;
+				std::uint32_t UnknownC;
+				std::uint32_t UnknownD;
+				std::uint32_t UnknownE; // UnknownFlag
+				std::uint32_t VertexAttributeMask;
+
+				// Not sure what this indicates but when non-zero then it skips
+				// loading all geometry data from the file.
+				std::uint32_t UnknownSkip;
+			} Header;
+			CurChunkData = ReadFormattedBytes(
+				CurChunkData, "slllllll", Header.String, &Header.UnknownA,
+				&Header.UnknownB, &Header.UnknownC, &Header.UnknownD,
+				&Header.UnknownE, &Header.VertexAttributeMask,
+				&Header.UnknownSkip
+			);
+
+			if( Header.UnknownSkip )
+			{
+				break;
+			}
+
+			std::uint32_t VertexCount;
+			CurChunkData = ReadFormattedBytes(CurChunkData, "l", &VertexCount);
+			const std::size_t VertexDataSize
+				= GetVertexBufferStride(Header.VertexAttributeMask)
+				* VertexCount;
+
+			// Vertex data
+			const std::span<const std::byte> VertexData
+				= CurChunkData.first(VertexDataSize);
+
+			CurChunkData = CurChunkData.subspan(VertexDataSize);
+
+			std::uint32_t IndexStreamCount;
+			CurChunkData
+				= ReadFormattedBytes(CurChunkData, "l", &IndexStreamCount);
+
+			for( std::size_t i = 0; i < IndexStreamCount; ++i )
+			{
+				std::uint32_t UnknownOne, CurIndexCount;
+				CurChunkData = ReadFormattedBytes(
+					CurChunkData, "ll", &UnknownOne, &CurIndexCount
+				);
+
+				const std::size_t IndexDataSize
+					= CurIndexCount * sizeof(std::uint16_t);
+
+				const std::span<const std::uint16_t> IndexData{
+					reinterpret_cast<const std::uint16_t*>(CurChunkData.data()),
+					CurIndexCount};
+
+				CurChunkData = CurChunkData.subspan(IndexDataSize);
+			}
+
 			break;
 		}
 		case TagID::Material:
