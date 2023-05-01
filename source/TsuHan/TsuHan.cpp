@@ -77,8 +77,7 @@ std::span<const std::byte>
 			const std::size_t StringLength
 				= std::strlen((const char*)Bytes.data());
 
-			const std::size_t StringLengthAligned
-				= 4 * ((StringLength - 1) / 4) + 4;
+			const std::size_t StringLengthAligned = 4 * (StringLength / 4) + 4;
 
 			char* Value = va_arg(Args, char*);
 
@@ -121,7 +120,7 @@ static std::span<const std::byte>
 				= std::strlen((const char*)Bytes.data());
 
 			const std::size_t StringLengthAligned
-				= 4 * ((StringLength - 1) / 4) + 4;
+				= 4 * ((StringLength) / 4) + 4;
 
 			char String[256];
 			std::memcpy(String, Bytes.data(), StringLength);
