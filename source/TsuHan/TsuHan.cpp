@@ -119,8 +119,7 @@ static std::span<const std::byte>
 			const std::size_t StringLength
 				= std::strlen((const char*)Bytes.data());
 
-			const std::size_t StringLengthAligned
-				= 4 * ((StringLength) / 4) + 4;
+			const std::size_t StringLengthAligned = 4 * (StringLength / 4) + 4;
 
 			char String[256];
 			std::memcpy(String, Bytes.data(), StringLength);
@@ -243,6 +242,16 @@ void HGMHandler(
 		}
 		case TagID::Mesh:
 		{
+			// s
+			CurChunkData = PrintFormattedBytes(CurChunkData, "s");
+
+			std::uint32_t UnknownCount;
+			CurChunkData = ReadFormattedBytes(CurChunkData, "l", &UnknownCount);
+
+			for( std::uint32_t i = 0; i < UnknownCount; ++i )
+			{
+				CurChunkData = PrintFormattedBytes(CurChunkData, "ss");
+			}
 			break;
 		}
 		case TagID::Texture:
@@ -277,7 +286,7 @@ void HGMHandler(
 		}
 		case TagID::Unknown10:
 		{
-			// sl
+			// sll
 			CurChunkData = PrintFormattedBytes(CurChunkData, "sll");
 			break;
 		}
