@@ -14,7 +14,8 @@
 
 bool ProcessPack(
 	const std::filesystem::path& DumpPath,
-	const std::filesystem::path& PackPath, TsuHan::PackFileInfo PackInfo);
+	const std::filesystem::path& PackPath, TsuHan::PackFileInfo PackInfo
+);
 
 int main(int argc, char* argv[])
 {
@@ -22,7 +23,7 @@ int main(int argc, char* argv[])
 
 	if( Arguments.size() < 3 )
 	{
-		// nothing to d
+		// nothing to do
 		return EXIT_SUCCESS;
 	}
 
@@ -51,14 +52,15 @@ int main(int argc, char* argv[])
 
 bool ProcessPack(
 	const std::filesystem::path& DumpPath,
-	const std::filesystem::path& PackPath, TsuHan::PackFileInfo PackInfo)
+	const std::filesystem::path& PackPath, TsuHan::PackFileInfo PackInfo
+)
 
 {
 	auto MappedFile = mio::mmap_source(PackPath.string().c_str());
 
 	const auto FileData = std::span<const std::byte>(
-		reinterpret_cast<const std::byte*>(MappedFile.data()),
-		MappedFile.size());
+		reinterpret_cast<const std::byte*>(MappedFile.data()), MappedFile.size()
+	);
 
 	std::vector<std::byte> DecryptedData(FileData.begin(), FileData.end());
 
@@ -66,7 +68,8 @@ bool ProcessPack(
 	{
 		const auto DecryptedData32 = std::span<std::uint32_t>(
 			reinterpret_cast<std::uint32_t*>(DecryptedData.data()),
-			DecryptedData.size() / 4);
+			DecryptedData.size() / 4
+		);
 
 		for( std::uint32_t& CurWord : DecryptedData32 )
 		{
@@ -87,11 +90,13 @@ bool ProcessPack(
 			= std::span(DecryptedData).subspan(FileSpan.Offset, FileSpan.Size);
 
 		std::printf(
-			"-%s (%zu bytes)\n", OutPath.string().c_str(), CurFileData.size());
+			"-%s (%zu bytes)\n", OutPath.string().c_str(), CurFileData.size()
+		);
 
 		OutFile.write(
 			reinterpret_cast<const char*>(CurFileData.data()),
-			CurFileData.size());
+			CurFileData.size()
+		);
 
 		if( PackInfo.Handler )
 		{

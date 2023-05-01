@@ -36,7 +36,8 @@ std::span<const std::byte>
 	ReadFormattedBytes(std::span<const std::byte> Bytes, const char* Format...);
 
 void HGMHandler(
-	std::span<const std::byte> FileData, std::filesystem::path FilePath);
+	std::span<const std::byte> FileData, std::filesystem::path FilePath
+);
 
 struct Chunk
 {

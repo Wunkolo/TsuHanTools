@@ -1,5 +1,6 @@
 #include <TsuHan/TsuHan.hpp>
 
+#include <cstdarg>
 #include <cstring>
 #include <string_view>
 
@@ -79,15 +80,20 @@ std::span<const std::byte>
 			const std::size_t StringLengthAligned
 				= 4 * ((StringLength - 1) / 4) + 4;
 
+			char* Value = va_arg(Args, char*);
+
+			std::memcpy(Value, Bytes.data(), StringLength);
+
 			Bytes = Bytes.subspan(StringLengthAligned);
 			break;
 		}
 		case 'l':
 		case 'f':
 		{
-			std::uint32_t Value = va_arg(Args, std::uint32_t);
+			std::uint32_t* Value = va_arg(Args, std::uint32_t*);
+			std::memcpy(Value, Bytes.data(), sizeof(std::uint32_t));
 
-			Bytes = Bytes.subspan(4);
+			Bytes = Bytes.subspan(sizeof(std::uint32_t));
 			break;
 		}
 		}
@@ -98,7 +104,8 @@ std::span<const std::byte>
 }
 
 void HGMHandler(
-	std::span<const std::byte> FileData, std::filesystem::path FilePath)
+	std::span<const std::byte> FileData, std::filesystem::path FilePath
+)
 {
 	while( FileData.size() )
 	{
