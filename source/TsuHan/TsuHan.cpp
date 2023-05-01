@@ -103,6 +103,56 @@ std::span<const std::byte>
 	return Bytes;
 }
 
+static std::span<const std::byte>
+	PrintFormattedBytes(std::span<const std::byte> Bytes, const char* Format)
+{
+	for( const char& Token : std::string_view(Format) )
+	{
+		if( Bytes.empty() )
+		{
+			return Bytes;
+		}
+
+		switch( std::tolower(Token) )
+		{
+		case 's':
+		{
+			const std::size_t StringLength
+				= std::strlen((const char*)Bytes.data());
+
+			const std::size_t StringLengthAligned
+				= 4 * ((StringLength - 1) / 4) + 4;
+
+			char String[256];
+			std::memcpy(String, Bytes.data(), StringLength);
+
+			std::printf(
+				"\t %%s \'%.*s\'\n", (std::uint32_t)StringLength, String
+			);
+			Bytes = Bytes.subspan(StringLengthAligned);
+			break;
+		}
+		case 'l':
+		{
+			std::uint32_t Integer;
+			std::memcpy(&Integer, Bytes.data(), sizeof(std::uint32_t));
+			std::printf("\t %%l %d(0x%08x)\n", Integer, Integer);
+			Bytes = Bytes.subspan(sizeof(std::uint32_t));
+			break;
+		}
+		case 'f':
+		{
+			float Float;
+			std::memcpy(&Float, Bytes.data(), sizeof(float));
+			std::printf("\t %%f %f\n", Float);
+			Bytes = Bytes.subspan(sizeof(float));
+			break;
+		}
+		}
+	}
+	return Bytes;
+}
+
 void HGMHandler(
 	std::span<const std::byte> FileData, std::filesystem::path FilePath
 )
