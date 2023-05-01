@@ -165,7 +165,7 @@ void HGMHandler(
 
 		std::printf("%s(%u)\n", ToString(CurChunk.Tag), CurChunk.Size);
 
-		std::printf("\t-%s\n", (const char*)CurChunkData.data());
+		std::printf("\\%s\n", (const char*)CurChunkData.data());
 
 		switch( CurChunk.Tag )
 		{
@@ -175,10 +175,10 @@ void HGMHandler(
 			struct GeometryHeader
 			{
 				char          String[256] = {};
-				std::uint32_t UnknownA;
-				std::uint32_t UnknownB;
-				std::uint32_t UnknownC;
-				std::uint32_t UnknownD;
+				float         UnknownA;
+				float         UnknownB;
+				float         UnknownC;
+				float         UnknownD;
 				std::uint32_t UnknownE; // UnknownFlag
 				std::uint32_t VertexAttributeMask;
 
@@ -186,8 +186,9 @@ void HGMHandler(
 				// loading all geometry data from the file.
 				std::uint32_t UnknownSkip;
 			} Header;
+			PrintFormattedBytes(CurChunkData, "sfffflll");
 			CurChunkData = ReadFormattedBytes(
-				CurChunkData, "slllllll", Header.String, &Header.UnknownA,
+				CurChunkData, "sfffflll", Header.String, &Header.UnknownA,
 				&Header.UnknownB, &Header.UnknownC, &Header.UnknownD,
 				&Header.UnknownE, &Header.VertexAttributeMask,
 				&Header.UnknownSkip
@@ -199,6 +200,7 @@ void HGMHandler(
 			}
 
 			std::uint32_t VertexCount;
+			PrintFormattedBytes(CurChunkData, "l");
 			CurChunkData = ReadFormattedBytes(CurChunkData, "l", &VertexCount);
 			const std::size_t VertexDataSize
 				= GetVertexBufferStride(Header.VertexAttributeMask)
@@ -211,12 +213,14 @@ void HGMHandler(
 			CurChunkData = CurChunkData.subspan(VertexDataSize);
 
 			std::uint32_t IndexStreamCount;
+			PrintFormattedBytes(CurChunkData, "l");
 			CurChunkData
 				= ReadFormattedBytes(CurChunkData, "l", &IndexStreamCount);
 
 			for( std::size_t i = 0; i < IndexStreamCount; ++i )
 			{
 				std::uint32_t UnknownOne, CurIndexCount;
+				PrintFormattedBytes(CurChunkData, "ll");
 				CurChunkData = ReadFormattedBytes(
 					CurChunkData, "ll", &UnknownOne, &CurIndexCount
 				);
@@ -243,14 +247,23 @@ void HGMHandler(
 		case TagID::Mesh:
 		{
 			// s
-			CurChunkData = PrintFormattedBytes(CurChunkData, "s");
+			char MeshName[256];
+			CurChunkData = ReadFormattedBytes(CurChunkData, "s", MeshName);
 
-			std::uint32_t UnknownCount;
-			CurChunkData = ReadFormattedBytes(CurChunkData, "l", &UnknownCount);
+			std::uint32_t SubmeshCount;
+			CurChunkData = ReadFormattedBytes(CurChunkData, "l", &SubmeshCount);
 
-			for( std::uint32_t i = 0; i < UnknownCount; ++i )
+			for( std::uint32_t i = 0; i < SubmeshCount; ++i )
 			{
-				CurChunkData = PrintFormattedBytes(CurChunkData, "ss");
+				char GeometryName[256];
+				char MaterialName[256];
+				CurChunkData = ReadFormattedBytes(
+					CurChunkData, "ss", GeometryName, MaterialName
+				);
+				std::printf(
+					"\t%u : (Mesh: %s, Material: %s)\n", i, GeometryName,
+					MaterialName
+				);
 			}
 			break;
 		}
