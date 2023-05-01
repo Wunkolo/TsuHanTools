@@ -237,6 +237,9 @@ void HGMHandler(
 		}
 		case TagID::Material:
 		{
+			// sl
+			CurChunkData = PrintFormattedBytes(CurChunkData, "sl");
+
 			break;
 		}
 		case TagID::Mesh:
@@ -246,32 +249,43 @@ void HGMHandler(
 		case TagID::Texture:
 		{
 			// ssllllll
+			CurChunkData = PrintFormattedBytes(CurChunkData, "ssllllll");
 			break;
 		}
 		case TagID::Transform:
 		{
 			// sllllllllll
+			CurChunkData = PrintFormattedBytes(CurChunkData, "slffflllfff");
 			break;
 		}
 		case TagID::Unknown7:
 		{
+			// sssll
+			CurChunkData = PrintFormattedBytes(CurChunkData, "sssll");
 			break;
 		}
 		case TagID::Unknown8:
 		{
+			// sl
+			CurChunkData = PrintFormattedBytes(CurChunkData, "sl");
 			break;
 		}
 		case TagID::Unknown9:
 		{
+			// sl
+			CurChunkData = PrintFormattedBytes(CurChunkData, "sl");
 			break;
 		}
 		case TagID::Unknown10:
 		{
+			// sl
+			CurChunkData = PrintFormattedBytes(CurChunkData, "sll");
 			break;
 		}
 		case TagID::Bone:
 		{
 			// sllllllllll
+			CurChunkData = PrintFormattedBytes(CurChunkData, "slffflllfff");
 			break;
 		}
 		default:
