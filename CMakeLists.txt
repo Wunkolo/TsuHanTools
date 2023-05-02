@@ -81,6 +81,9 @@ endif()
 # mio
 add_subdirectory( external/mio EXCLUDE_FROM_ALL )
 
+# tinygltf
+add_subdirectory( external/tinygltf EXCLUDE_FROM_ALL )
+
 # TsuHan
 add_library(
 	TsuHan
@@ -91,6 +94,12 @@ target_include_directories(
 	TsuHan
 	PRIVATE
 	include
+)
+
+target_link_libraries(
+	TsuHan
+	PRIVATE
+	tinygltf
 )
 
 # Dump

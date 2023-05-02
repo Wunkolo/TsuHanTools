@@ -4,6 +4,8 @@
 #include <cstring>
 #include <string_view>
 
+#include "tiny_gltf.h"
+
 namespace TsuHan
 {
 
@@ -81,7 +83,7 @@ std::span<const std::byte>
 
 			char* Value = va_arg(Args, char*);
 
-			std::memcpy(Value, Bytes.data(), StringLength);
+			std::memcpy(Value, Bytes.data(), StringLengthAligned);
 
 			Bytes = Bytes.subspan(StringLengthAligned);
 			break;
@@ -122,7 +124,7 @@ static std::span<const std::byte>
 			const std::size_t StringLengthAligned = 4 * (StringLength / 4) + 4;
 
 			char String[256];
-			std::memcpy(String, Bytes.data(), StringLength);
+			std::memcpy(String, Bytes.data(), StringLengthAligned);
 
 			std::printf(
 				"\t %%s \'%.*s\'\n", (std::uint32_t)StringLength, String
@@ -151,10 +153,45 @@ static std::span<const std::byte>
 	return Bytes;
 }
 
+template<class ForwardIt>
+static ForwardIt max_element_nth(ForwardIt first, ForwardIt last, int n)
+{
+	if( first == last )
+	{
+		return last;
+	}
+	ForwardIt largest = first;
+	first += n;
+	for( ; first < last; first += n )
+	{
+		if( *largest < *first )
+		{
+			largest = first;
+		}
+	}
+	return largest;
+}
+
 void HGMHandler(
 	std::span<const std::byte> FileData, std::filesystem::path FilePath
 )
 {
+	tinygltf::Asset GLTFAsset{};
+	GLTFAsset.generator = "TsuHanTools:" __TIMESTAMP__;
+	GLTFAsset.version   = "2.0";
+
+	tinygltf::Model GLTFModel;
+
+	tinygltf::Scene GLTFScene;
+	GLTFScene.name = FilePath.filename();
+	GLTFScene.nodes.push_back(0);
+
+	GLTFModel.scenes.push_back(GLTFScene);
+
+	std::unordered_map<std::string, std::tuple<std::uint32_t, std::uint32_t>>
+												   GeometryLut;
+	std::unordered_map<std::string, std::uint32_t> MaterialLUT;
+
 	while( FileData.size() )
 	{
 		const Chunk& CurChunk
@@ -174,7 +211,7 @@ void HGMHandler(
 			// slllllll
 			struct GeometryHeader
 			{
-				char          String[256] = {};
+				char          Name[256] = {};
 				float         UnknownA;
 				float         UnknownB;
 				float         UnknownC;
@@ -188,7 +225,7 @@ void HGMHandler(
 			} Header;
 			PrintFormattedBytes(CurChunkData, "sfffflll");
 			CurChunkData = ReadFormattedBytes(
-				CurChunkData, "sfffflll", Header.String, &Header.UnknownA,
+				CurChunkData, "sfffflll", Header.Name, &Header.UnknownA,
 				&Header.UnknownB, &Header.UnknownC, &Header.UnknownD,
 				&Header.UnknownE, &Header.VertexAttributeMask,
 				&Header.UnknownSkip
@@ -210,6 +247,42 @@ void HGMHandler(
 			const std::span<const std::byte> VertexData
 				= CurChunkData.first(VertexDataSize);
 
+			// Add vertex data to gltf
+			std::uint32_t VertexPositionAccessorIdx;
+			{
+				tinygltf::Buffer VertexBuffer;
+				VertexBuffer.name
+					= VertexBuffer.name + Header.Name + ": VertexBuffer";
+				std::transform(
+					VertexData.begin(),
+					VertexData.end(),
+					std::back_inserter(VertexBuffer.data),
+					std::to_integer<unsigned char>
+				);
+				GLTFModel.buffers.push_back(VertexBuffer);
+
+				tinygltf::BufferView VertexBufferView;
+				VertexBufferView.buffer     = GLTFModel.buffers.size() - 1;
+				VertexBufferView.byteOffset = 0;
+				VertexBufferView.byteLength = VertexDataSize;
+				VertexBufferView.byteStride
+					= GetVertexBufferStride(Header.VertexAttributeMask);
+				VertexBufferView.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+				GLTFModel.bufferViews.push_back(VertexBufferView);
+
+				tinygltf::Accessor VertexAccessor;
+				VertexAccessor.bufferView    = GLTFModel.bufferViews.size() - 1;
+				VertexAccessor.byteOffset    = 0;
+				VertexAccessor.maxValues     = {+5.0, +5.0, +5.0};
+				VertexAccessor.minValues     = {-5.0, -5.0, -5.0};
+				VertexAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+				VertexAccessor.count         = VertexCount;
+				VertexAccessor.type          = TINYGLTF_TYPE_VEC3;
+
+				GLTFModel.accessors.push_back(VertexAccessor);
+				VertexPositionAccessorIdx = GLTFModel.accessors.size() - 1;
+			}
+
 			CurChunkData = CurChunkData.subspan(VertexDataSize);
 
 			std::uint32_t IndexStreamCount;
@@ -217,31 +290,91 @@ void HGMHandler(
 			CurChunkData
 				= ReadFormattedBytes(CurChunkData, "l", &IndexStreamCount);
 
-			for( std::size_t i = 0; i < IndexStreamCount; ++i )
+			// This is technically iterated, but there has yet to be a single
+			// mesh that uses anything other than 1
+			assert(IndexStreamCount == 1);
+
+			// for( std::size_t i = 0; i < IndexStreamCount; ++i )
+			//{
+			std::uint32_t UnknownOne; // Index format?
+			std::uint32_t CurIndexCount;
+			PrintFormattedBytes(CurChunkData, "ll");
+			CurChunkData = ReadFormattedBytes(
+				CurChunkData, "ll", &UnknownOne, &CurIndexCount
+			);
+
+			const std::size_t IndexDataSize
+				= CurIndexCount * sizeof(std::uint16_t);
+
+			const std::span<const std::uint16_t> IndexData{
+				reinterpret_cast<const std::uint16_t*>(CurChunkData.data()),
+				CurIndexCount};
+
+			// Add vertex data to gltf
+			std::uint32_t IndexAccessorIdx;
 			{
-				std::uint32_t UnknownOne, CurIndexCount;
-				PrintFormattedBytes(CurChunkData, "ll");
-				CurChunkData = ReadFormattedBytes(
-					CurChunkData, "ll", &UnknownOne, &CurIndexCount
+				tinygltf::Buffer IndexBuffer;
+				IndexBuffer.name
+					= IndexBuffer.name + Header.Name + ": IndexBuffer";
+				std::transform(
+					std::as_bytes(IndexData).begin(),
+					std::as_bytes(IndexData).end(),
+					std::back_inserter(IndexBuffer.data),
+					std::to_integer<unsigned char>
 				);
+				GLTFModel.buffers.push_back(IndexBuffer);
 
-				const std::size_t IndexDataSize
-					= CurIndexCount * sizeof(std::uint16_t);
+				tinygltf::BufferView IndexBufferView;
+				IndexBufferView.buffer     = GLTFModel.buffers.size() - 1;
+				IndexBufferView.byteOffset = 0;
+				IndexBufferView.byteLength = IndexDataSize;
+				IndexBufferView.target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
+				GLTFModel.bufferViews.push_back(IndexBufferView);
 
-				const std::span<const std::uint16_t> IndexData{
-					reinterpret_cast<const std::uint16_t*>(CurChunkData.data()),
-					CurIndexCount};
+				tinygltf::Accessor VertexAccessor;
+				VertexAccessor.bufferView = GLTFModel.bufferViews.size() - 1;
+				VertexAccessor.byteOffset = 0;
+				VertexAccessor.maxValues.push_back(
+					*std::max_element(IndexData.begin(), IndexData.end())
+				);
+				VertexAccessor.minValues.push_back(
+					*std::min_element(IndexData.begin(), IndexData.end())
+				);
+				VertexAccessor.componentType
+					= TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+				VertexAccessor.count = CurIndexCount;
+				VertexAccessor.type  = TINYGLTF_TYPE_SCALAR;
 
-				CurChunkData = CurChunkData.subspan(IndexDataSize);
+				GLTFModel.accessors.push_back(VertexAccessor);
+				IndexAccessorIdx = GLTFModel.accessors.size() - 1;
 			}
+
+			CurChunkData = CurChunkData.subspan(IndexDataSize);
+			//}
+
+			GeometryLut[Header.Name]
+				= {IndexAccessorIdx, VertexPositionAccessorIdx};
 
 			break;
 		}
 		case TagID::Material:
 		{
 			// sl
-			CurChunkData = PrintFormattedBytes(CurChunkData, "sl");
+			char          MaterialName[256];
+			std::uint32_t MaterialType;
+			PrintFormattedBytes(CurChunkData, "sl");
+			CurChunkData = ReadFormattedBytes(
+				CurChunkData, "sl", MaterialName, &MaterialType
+			);
 
+			tinygltf::Material NewMaterial;
+			NewMaterial.name        = MaterialName;
+			NewMaterial.doubleSided = true;
+			NewMaterial.pbrMetallicRoughness.baseColorFactor
+				= {1.0f, 0.9f, 0.9f, 1.0f};
+
+			GLTFModel.materials.push_back(NewMaterial);
+			MaterialLUT.emplace(MaterialName, GLTFModel.materials.size() - 1);
 			break;
 		}
 		case TagID::Mesh:
@@ -253,18 +386,38 @@ void HGMHandler(
 			std::uint32_t SubmeshCount;
 			CurChunkData = ReadFormattedBytes(CurChunkData, "l", &SubmeshCount);
 
+			tinygltf::Mesh NewMesh;
+			NewMesh.name = MeshName;
+
 			for( std::uint32_t i = 0; i < SubmeshCount; ++i )
 			{
-				char GeometryName[256];
 				char MaterialName[256];
+				char GeometryName[256];
 				CurChunkData = ReadFormattedBytes(
-					CurChunkData, "ss", GeometryName, MaterialName
+					CurChunkData, "ss", MaterialName, GeometryName
 				);
 				std::printf(
-					"\t%u : (Mesh: %s, Material: %s)\n", i, GeometryName,
-					MaterialName
+					"\t%u : (Material: %s, Geometry: %s)\n", i, MaterialName,
+					GeometryName
 				);
+
+				const auto&         Geo = GeometryLut.at(GeometryName);
+				tinygltf::Primitive NewPrimitive;
+				NewPrimitive.indices                = std::get<0>(Geo);
+				NewPrimitive.attributes["POSITION"] = std::get<1>(Geo);
+				NewPrimitive.material = MaterialLUT.at(MaterialName);
+				NewPrimitive.mode     = TINYGLTF_MODE_TRIANGLE_STRIP;
+				NewMesh.primitives.push_back(NewPrimitive);
 			}
+
+			GLTFModel.meshes.push_back(NewMesh);
+
+			// Todo, move the scene node/hiearchy stuff
+			tinygltf::Node NewNode;
+			NewNode.name = MeshName;
+			NewNode.mesh = GLTFModel.meshes.size() - 1;
+
+			GLTFModel.nodes.push_back(NewNode);
 			break;
 		}
 		case TagID::Texture:
@@ -317,6 +470,17 @@ void HGMHandler(
 
 		FileData = FileData.subspan(CurChunk.Size);
 	}
+
+	const std::filesystem::path DestPath = FilePath.replace_extension(".gltf");
+	// Save it to a file
+	tinygltf::TinyGLTF gltf;
+	gltf.WriteGltfSceneToFile(
+		&GLTFModel, DestPath.string(),
+		true, // embedImages
+		true, // embedBuffers
+		true, // pretty print
+		false
+	); // write binary
 }
 } // namespace HGM
 } // namespace TsuHan
