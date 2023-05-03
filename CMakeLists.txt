@@ -100,6 +100,7 @@ target_link_libraries(
 	TsuHan
 	PRIVATE
 	tinygltf
+	mio
 )
 
 # Dump

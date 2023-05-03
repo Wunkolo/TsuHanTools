@@ -2,9 +2,12 @@
 
 #include <cstdarg>
 #include <cstring>
+#include <regex>
 #include <string_view>
 
 #include "tiny_gltf.h"
+
+#include <mio/mmap.hpp>
 
 namespace TsuHan
 {
@@ -190,6 +193,7 @@ void HGMHandler(
 
 	std::unordered_map<std::string, std::array<std::int32_t, 16>> GeometryLUT;
 	std::unordered_map<std::string, std::uint32_t>                MaterialLUT;
+	std::unordered_map<std::string, std::uint32_t>                TextureLUT;
 
 	while( FileData.size() )
 	{
@@ -347,7 +351,7 @@ void HGMHandler(
 						(AttribMask - 1) & Header.VertexAttributeMask
 					);
 					TexCoordAccessor.maxValues = {+1.0, +1.0};
-					TexCoordAccessor.minValues = {-1.0, -1.0};
+					TexCoordAccessor.minValues = {0.0, 0.0};
 					TexCoordAccessor.componentType
 						= TINYGLTF_COMPONENT_TYPE_FLOAT;
 					TexCoordAccessor.count = VertexCount;
@@ -454,8 +458,32 @@ void HGMHandler(
 			NewMaterial.name        = MaterialName;
 			NewMaterial.doubleSided = true;
 			NewMaterial.pbrMetallicRoughness.baseColorFactor
-				= {1.0f, 0.9f, 0.9f, 1.0f};
+				= {1.0f, 1.0f, 1.0f, 1.0f};
 
+			if( MaterialType <= 8 )
+			{
+				PrintFormattedBytes(CurChunkData, "s");
+				char TextureName[256];
+				CurChunkData = ReadFormattedBytes(
+					CurChunkData, "s", TextureName, &MaterialType
+				);
+				if( std::string_view(TextureName) != "__NOTEX__" )
+				{
+					if( !TextureLUT.contains(TextureName) )
+					{
+						// Texture might not exist yet, put a place-holder for
+						// now
+						GLTFModel.textures.push_back({});
+						TextureLUT.emplace(
+							TextureName, GLTFModel.textures.size() - 1
+						);
+					}
+					NewMaterial.pbrMetallicRoughness.baseColorTexture.texCoord
+						= 0;
+					NewMaterial.pbrMetallicRoughness.baseColorTexture.index
+						= TextureLUT.at(TextureName);
+				}
+			}
 			GLTFModel.materials.push_back(NewMaterial);
 			MaterialLUT.emplace(MaterialName, GLTFModel.materials.size() - 1);
 			break;
@@ -514,7 +542,60 @@ void HGMHandler(
 		case TagID::Texture:
 		{
 			// ssllllll
-			CurChunkData = PrintFormattedBytes(CurChunkData, "ssllllll");
+			PrintFormattedBytes(CurChunkData, "ssllllll");
+			char TextureName[256];
+			char TextureFileName[256];
+			CurChunkData = ReadFormattedBytes(
+				CurChunkData, "ss", TextureName, TextureFileName
+			);
+
+			std::filesystem::path TextureURI(std::regex_replace(
+				FilePath.string(), std::regex("model"), "texture"
+			));
+
+			std::string TextureFileNameUpper(TextureFileName);
+			std::transform(
+				TextureFileNameUpper.begin(), TextureFileNameUpper.end(),
+				TextureFileNameUpper.begin(), ::toupper
+			);
+
+			TextureURI.replace_filename(TextureFileNameUpper);
+			TextureURI.replace_extension(".tga");
+
+			auto MappedImage = mio::mmap_source(TextureURI.string().c_str());
+
+			tinygltf::Buffer ImageBuffer;
+			ImageBuffer.name = TextureFileNameUpper + ": Buffer";
+			ImageBuffer.data.assign(MappedImage.begin(), MappedImage.end());
+			GLTFModel.buffers.push_back(ImageBuffer);
+
+			tinygltf::BufferView ImageBufferView;
+			ImageBufferView.name       = TextureFileNameUpper + ": BufferView";
+			ImageBufferView.buffer     = GLTFModel.buffers.size() - 1;
+			ImageBufferView.byteLength = MappedImage.size();
+
+			GLTFModel.bufferViews.push_back(ImageBufferView);
+
+			tinygltf::Image NewImage;
+			NewImage.name       = TextureName;
+			NewImage.mimeType   = "image/tga";
+			NewImage.bufferView = GLTFModel.bufferViews.size() - 1;
+			GLTFModel.images.push_back(NewImage);
+
+			tinygltf::Texture NewTexture;
+			NewTexture.name   = TextureName;
+			NewTexture.source = GLTFModel.images.size() - 1;
+
+			if( TextureLUT.contains(TextureName) )
+			{
+				// Replace the place-holder texture
+				GLTFModel.textures[TextureLUT.at(TextureName)] = NewTexture;
+			}
+			else
+			{
+				GLTFModel.textures.push_back(NewTexture);
+				TextureLUT.emplace(TextureName, GLTFModel.textures.size() - 1);
+			}
 			break;
 		}
 		case TagID::Transform:
