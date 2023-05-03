@@ -188,10 +188,8 @@ void HGMHandler(
 
 	GLTFModel.scenes.push_back(GLTFScene);
 
-	std::unordered_map<
-		std::string, std::tuple<std::uint32_t, std::uint32_t, std::uint32_t>>
-												   GeometryLUT;
-	std::unordered_map<std::string, std::uint32_t> MaterialLUT;
+	std::unordered_map<std::string, std::array<std::int32_t, 16>> GeometryLUT;
+	std::unordered_map<std::string, std::uint32_t>                MaterialLUT;
 
 	while( FileData.size() )
 	{
@@ -249,8 +247,10 @@ void HGMHandler(
 				= CurChunkData.first(VertexDataSize);
 
 			// Add vertex data to gltf
-			std::uint32_t VertexPositionAccessorIdx;
-			std::uint32_t VertexNormalAccessorIdx;
+			std::int32_t VertexPositionAccessorIdx = -1;
+			std::int32_t VertexNormalAccessorIdx   = -1;
+			std::int32_t VertexTangentAccessorIdx  = -1;
+			std::int32_t VertexTexCoordAccessorIdx = -1;
 			{
 				tinygltf::Buffer VertexBuffer;
 				VertexBuffer.name
@@ -263,49 +263,99 @@ void HGMHandler(
 				);
 				GLTFModel.buffers.push_back(VertexBuffer);
 
-				// Positions
-				tinygltf::BufferView PositionBuffer;
-				PositionBuffer.buffer     = GLTFModel.buffers.size() - 1;
-				PositionBuffer.byteOffset = 0;
-				PositionBuffer.byteLength = VertexDataSize;
-				PositionBuffer.byteStride
+				tinygltf::BufferView VertexBufferView;
+				VertexBufferView.buffer     = GLTFModel.buffers.size() - 1;
+				VertexBufferView.byteOffset = 0;
+				VertexBufferView.byteLength = VertexDataSize;
+				VertexBufferView.byteStride
 					= GetVertexBufferStride(Header.VertexAttributeMask);
-				PositionBuffer.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-				GLTFModel.bufferViews.push_back(PositionBuffer);
+				VertexBufferView.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+				GLTFModel.bufferViews.push_back(VertexBufferView);
 
-				tinygltf::Accessor PositionAccessor;
-				PositionAccessor.bufferView = GLTFModel.bufferViews.size() - 1;
-				PositionAccessor.byteOffset = 0;
-				PositionAccessor.maxValues  = {+5.0, +5.0, +5.0};
-				PositionAccessor.minValues  = {-5.0, -5.0, -5.0};
-				PositionAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-				PositionAccessor.count         = VertexCount;
-				PositionAccessor.type          = TINYGLTF_TYPE_VEC3;
+				// Positions
+				if( const std::uint32_t AttribMask = 0b0000'0'0000'00'0001;
+					Header.VertexAttributeMask & AttribMask )
+				{
 
-				GLTFModel.accessors.push_back(PositionAccessor);
-				VertexPositionAccessorIdx = GLTFModel.accessors.size() - 1;
+					tinygltf::Accessor PositionAccessor;
+					PositionAccessor.bufferView
+						= GLTFModel.bufferViews.size() - 1;
+					PositionAccessor.byteOffset = GetVertexBufferStride(
+						(AttribMask - 1) & Header.VertexAttributeMask
+					);
+					PositionAccessor.maxValues = {+5.0, +5.0, +5.0};
+					PositionAccessor.minValues = {-5.0, -5.0, -5.0};
+					PositionAccessor.componentType
+						= TINYGLTF_COMPONENT_TYPE_FLOAT;
+					PositionAccessor.count = VertexCount;
+					PositionAccessor.type  = TINYGLTF_TYPE_VEC3;
+
+					GLTFModel.accessors.push_back(PositionAccessor);
+					VertexPositionAccessorIdx = GLTFModel.accessors.size() - 1;
+				}
 
 				// Normals
-				tinygltf::BufferView NormalBuffer;
-				NormalBuffer.buffer     = GLTFModel.buffers.size() - 1;
-				NormalBuffer.byteOffset = 0;
-				NormalBuffer.byteLength = VertexDataSize;
-				NormalBuffer.byteStride
-					= GetVertexBufferStride(Header.VertexAttributeMask);
-				NormalBuffer.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-				GLTFModel.bufferViews.push_back(PositionBuffer);
+				if( const std::uint32_t AttribMask = 0b0000'0'0000'00'0010;
+					Header.VertexAttributeMask & AttribMask )
+				{
+					tinygltf::Accessor NormalAccessor;
+					NormalAccessor.bufferView
+						= GLTFModel.bufferViews.size() - 1;
+					NormalAccessor.byteOffset = GetVertexBufferStride(
+						(AttribMask - 1) & Header.VertexAttributeMask
+					);
+					NormalAccessor.maxValues = {+1.0, +1.0, +1.0};
+					NormalAccessor.minValues = {-1.0, -1.0, -1.0};
+					NormalAccessor.componentType
+						= TINYGLTF_COMPONENT_TYPE_FLOAT;
+					NormalAccessor.count = VertexCount;
+					NormalAccessor.type  = TINYGLTF_TYPE_VEC3;
 
-				tinygltf::Accessor NormalAccessor;
-				NormalAccessor.bufferView    = GLTFModel.bufferViews.size() - 1;
-				NormalAccessor.byteOffset    = sizeof(float) * 3;
-				NormalAccessor.maxValues     = {+1.0, +1.0, +1.0};
-				NormalAccessor.minValues     = {-1.0, -1.0, -1.0};
-				NormalAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-				NormalAccessor.count         = VertexCount;
-				NormalAccessor.type          = TINYGLTF_TYPE_VEC3;
+					GLTFModel.accessors.push_back(NormalAccessor);
+					VertexNormalAccessorIdx = GLTFModel.accessors.size() - 1;
+				}
 
-				GLTFModel.accessors.push_back(NormalAccessor);
-				VertexNormalAccessorIdx = GLTFModel.accessors.size() - 1;
+				// Tangents
+				if( const std::uint32_t AttribMask = 0b0000'0'0000'00'0100;
+					Header.VertexAttributeMask & AttribMask )
+				{
+					tinygltf::Accessor TangentAccessor;
+					TangentAccessor.bufferView
+						= GLTFModel.bufferViews.size() - 1;
+					TangentAccessor.byteOffset = GetVertexBufferStride(
+						(AttribMask - 1) & Header.VertexAttributeMask
+					);
+					TangentAccessor.maxValues = {+1.0, +1.0, +1.0};
+					TangentAccessor.minValues = {-1.0, -1.0, -1.0};
+					TangentAccessor.componentType
+						= TINYGLTF_COMPONENT_TYPE_FLOAT;
+					TangentAccessor.count = VertexCount;
+					TangentAccessor.type  = TINYGLTF_TYPE_VEC3;
+
+					GLTFModel.accessors.push_back(TangentAccessor);
+					VertexTangentAccessorIdx = GLTFModel.accessors.size() - 1;
+				}
+
+				// TexCoord
+				if( const std::uint32_t AttribMask = 0b0001'0'0000'00'0000;
+					Header.VertexAttributeMask & AttribMask )
+				{
+					tinygltf::Accessor TexCoordAccessor;
+					TexCoordAccessor.bufferView
+						= GLTFModel.bufferViews.size() - 1;
+					TexCoordAccessor.byteOffset = GetVertexBufferStride(
+						(AttribMask - 1) & Header.VertexAttributeMask
+					);
+					TexCoordAccessor.maxValues = {+1.0, +1.0};
+					TexCoordAccessor.minValues = {-1.0, -1.0};
+					TexCoordAccessor.componentType
+						= TINYGLTF_COMPONENT_TYPE_FLOAT;
+					TexCoordAccessor.count = VertexCount;
+					TexCoordAccessor.type  = TINYGLTF_TYPE_VEC2;
+
+					GLTFModel.accessors.push_back(TexCoordAccessor);
+					VertexTexCoordAccessorIdx = GLTFModel.accessors.size() - 1;
+				}
 			}
 
 			CurChunkData = CurChunkData.subspan(VertexDataSize);
@@ -336,7 +386,7 @@ void HGMHandler(
 				CurIndexCount};
 
 			// Add vertex data to gltf
-			std::uint32_t IndexAccessorIdx;
+			std::int32_t IndexAccessorIdx = -1;
 			{
 				tinygltf::Buffer IndexBuffer;
 				IndexBuffer.name
@@ -377,9 +427,16 @@ void HGMHandler(
 			CurChunkData = CurChunkData.subspan(IndexDataSize);
 			//}
 
-			GeometryLUT[Header.Name]
-				= {IndexAccessorIdx, VertexPositionAccessorIdx,
-				   VertexNormalAccessorIdx};
+			GeometryLUT.insert_or_assign(
+				Header.Name,
+				std::array<std::int32_t, 16>{
+					IndexAccessorIdx,
+					VertexPositionAccessorIdx,
+					VertexNormalAccessorIdx,
+					VertexTangentAccessorIdx,
+					VertexTexCoordAccessorIdx,
+				}
+			);
 
 			break;
 		}
@@ -429,9 +486,16 @@ void HGMHandler(
 
 				const auto&         Geo = GeometryLUT.at(GeometryName);
 				tinygltf::Primitive NewPrimitive;
-				NewPrimitive.indices                = std::get<0>(Geo);
-				NewPrimitive.attributes["POSITION"] = std::get<1>(Geo);
-				NewPrimitive.attributes["NORMAL"]   = std::get<2>(Geo);
+				if( Geo[0] >= 0 )
+					NewPrimitive.indices = Geo[0];
+				if( Geo[1] >= 0 )
+					NewPrimitive.attributes["POSITION"] = Geo[1];
+				if( Geo[2] >= 0 )
+					NewPrimitive.attributes["NORMAL"] = Geo[2];
+				if( Geo[3] >= 0 )
+					NewPrimitive.attributes["TANGENT"] = Geo[3];
+				if( Geo[4] >= 0 )
+					NewPrimitive.attributes["TEXCOORD_0"] = Geo[4];
 				NewPrimitive.material = MaterialLUT.at(MaterialName);
 				NewPrimitive.mode     = TINYGLTF_MODE_TRIANGLE_STRIP;
 				NewMesh.primitives.push_back(NewPrimitive);
