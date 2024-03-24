@@ -270,7 +270,8 @@ void HGMHandler(
 			std::int32_t VertexNormalAccessorIdx   = -1;
 			std::int32_t VertexTangentAccessorIdx  = -1;
 			std::int32_t VertexColorAccessorIdx    = -1;
-			std::int32_t VertexWeights0AccessorIdx = -1;
+			std::int32_t VertexWeightsAccessorIdx  = -1;
+			std::int32_t VertexJointsAccessorIdx   = -1;
 			std::int32_t VertexTexCoordAccessorIdx = -1;
 			{
 				tinygltf::Buffer VertexBuffer;
@@ -388,10 +389,13 @@ void HGMHandler(
 					FloatData = FloatData.subspan(4);
 				}
 
-				//  Weights 0
-				if( const std::uint32_t AttribMask = 0b0000'1'0000'00'0000;
+				//  Unknown
+				if( const std::uint32_t AttribMask = 0b0000'0'0000'10'0000;
 					Header.VertexAttributeMask & AttribMask )
 				{
+					FloatData = FloatData.subspan(4);
+				}
+
 					tinygltf::Accessor WeightsAccessor;
 					WeightsAccessor.bufferView
 						= GLTFModel.bufferViews.size() - 1;
@@ -511,9 +515,10 @@ void HGMHandler(
 					VertexPositionAccessorIdx,
 					VertexNormalAccessorIdx,
 					VertexTangentAccessorIdx,
-					VertexTexCoordAccessorIdx,
 					VertexColorAccessorIdx,
-					VertexWeights0AccessorIdx,
+					VertexWeightsAccessorIdx,
+					VertexJointsAccessorIdx,
+					VertexTexCoordAccessorIdx,
 				}
 			);
 
@@ -628,33 +633,31 @@ void HGMHandler(
 
 				const auto&         Geo = GeometryLUT.at(GeometryName);
 				tinygltf::Primitive NewPrimitive;
+
 				if( Geo[0] >= 0 )
 				{
 					NewPrimitive.indices = Geo[0];
 				}
-				if( Geo[1] >= 0 )
+
+				const char* VertexAttributeNames[] = {
+					"POSITION",   // VertexPositionAccessorIdx
+					"NORMAL",     // VertexNormalAccessorIdx
+					"TANGENT",    // VertexTangentAccessorIdx
+					"COLOR_0",    // VertexColorAccessorIdx
+					"WEIGHTS_0",  // VertexWeightsAccessorIdx
+					"JOINTS_0",   // VertexJointsAccessorIdx
+					"TEXCOORD_0", // VertexTexCoordAccessorIdx
+				};
+				for( std::size_t AttributeIndex = 0;
+					 AttributeIndex < std::size(VertexAttributeNames);
+					 ++AttributeIndex )
 				{
-					NewPrimitive.attributes["POSITION"] = Geo[1];
-				}
-				if( Geo[2] >= 0 )
-				{
-					NewPrimitive.attributes["NORMAL"] = Geo[2];
-				}
-				if( Geo[3] >= 0 )
-				{
-					NewPrimitive.attributes["TANGENT"] = Geo[3];
-				}
-				if( Geo[4] >= 0 )
-				{
-					NewPrimitive.attributes["TEXCOORD_0"] = Geo[4];
-				}
-				if( Geo[5] >= 0 )
-				{
-					NewPrimitive.attributes["WEIGHTS_0"] = Geo[5];
-				}
-				if( Geo[6] >= 0 )
-				{
-					NewPrimitive.attributes["COLOR_0"] = Geo[6];
+					if( Geo[AttributeIndex + 1] >= 0 )
+					{
+						NewPrimitive
+							.attributes[VertexAttributeNames[AttributeIndex]]
+							= Geo[AttributeIndex + 1];
+					}
 				}
 				NewPrimitive.material = MaterialLUT.at(MaterialName);
 				NewPrimitive.mode     = TINYGLTF_MODE_TRIANGLE_STRIP;
