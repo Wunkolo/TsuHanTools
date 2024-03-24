@@ -745,7 +745,8 @@ void HGMHandler(
 						);
 
 						// 4: Set child
-						if( ChildAttributeType == 4 )
+						if( ChildAttributeType == 4
+							|| ChildAttributeType == 11 )
 						{
 							const auto CurrentNodeIndex
 								= TransformLUT.at(CurrentNodeName);
@@ -787,7 +788,42 @@ void HGMHandler(
 		case TagID::Bone:
 		{
 			// sllllllllll
-			CurChunkData = PrintFormattedBytes(CurChunkData, "slffflllfff");
+			PrintFormattedBytes(CurChunkData, "slfffffffff");
+			char          TransformName[256];
+			std::uint32_t Unknown1;
+			glm::vec3     Position = {};
+			glm::vec3     Rotation = {};
+			glm::vec3     Scale    = {};
+
+			CurChunkData = ReadFormattedBytes(
+				CurChunkData, "slfffffffff", TransformName, &Unknown1,
+				&Position[0], &Position[1], &Position[2], &Rotation[0],
+				&Rotation[1], &Rotation[2], &Scale[0], &Scale[1], &Scale[2]
+			);
+
+			tinygltf::Node NewNode;
+
+			NewNode.name = TransformName;
+
+			std::copy(
+				glm::begin(Position), glm::end(Position),
+				std::back_inserter(NewNode.translation)
+			);
+
+			const glm::quat RotationQuat = glm::quat(glm::radians(Rotation));
+
+			NewNode.rotation.push_back(RotationQuat[0]);
+			NewNode.rotation.push_back(RotationQuat[1]);
+			NewNode.rotation.push_back(RotationQuat[2]);
+			NewNode.rotation.push_back(RotationQuat[3]);
+
+			std::copy(
+				glm::begin(Scale), glm::end(Scale),
+				std::back_inserter(NewNode.scale)
+			);
+
+			GLTFModel.nodes.push_back(NewNode);
+			TransformLUT.emplace(TransformName, GLTFModel.nodes.size() - 1);
 			break;
 		}
 		default:
