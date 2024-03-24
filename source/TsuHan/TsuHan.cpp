@@ -269,6 +269,7 @@ void HGMHandler(
 			std::int32_t VertexPositionAccessorIdx = -1;
 			std::int32_t VertexNormalAccessorIdx   = -1;
 			std::int32_t VertexTangentAccessorIdx  = -1;
+			std::int32_t VertexColorAccessorIdx    = -1;
 			std::int32_t VertexTexCoordAccessorIdx = -1;
 			{
 				tinygltf::Buffer VertexBuffer;
@@ -281,6 +282,11 @@ void HGMHandler(
 					std::to_integer<unsigned char>
 				);
 				GLTFModel.buffers.push_back(VertexBuffer);
+
+				std::span<const float> FloatData(
+					(const float*)VertexData.data(),
+					VertexData.size() / sizeof(float)
+				);
 
 				tinygltf::BufferView VertexBufferView;
 				VertexBufferView.buffer     = GLTFModel.buffers.size() - 1;
@@ -311,6 +317,8 @@ void HGMHandler(
 
 					GLTFModel.accessors.push_back(PositionAccessor);
 					VertexPositionAccessorIdx = GLTFModel.accessors.size() - 1;
+
+					FloatData = FloatData.subspan(3);
 				}
 
 				// Normals
@@ -332,6 +340,8 @@ void HGMHandler(
 
 					GLTFModel.accessors.push_back(NormalAccessor);
 					VertexNormalAccessorIdx = GLTFModel.accessors.size() - 1;
+
+					FloatData = FloatData.subspan(3);
 				}
 
 				// Tangents
@@ -353,6 +363,28 @@ void HGMHandler(
 
 					GLTFModel.accessors.push_back(TangentAccessor);
 					VertexTangentAccessorIdx = GLTFModel.accessors.size() - 1;
+					FloatData                = FloatData.subspan(3);
+				}
+
+				//  Vertex Color
+				if( const std::uint32_t AttribMask = 0b0000'0'0000'01'0000;
+					Header.VertexAttributeMask & AttribMask )
+				{
+					tinygltf::Accessor ColorAccessor;
+					ColorAccessor.bufferView = GLTFModel.bufferViews.size() - 1;
+					ColorAccessor.byteOffset = GetVertexBufferStride(
+						(AttribMask - 1) & Header.VertexAttributeMask
+					);
+					ColorAccessor.maxValues     = {+1.0, +1.0, +1.0, +1.0};
+					ColorAccessor.minValues     = {0.0, 0.0, 0.0, 0.0};
+					ColorAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+					ColorAccessor.count         = VertexCount;
+					ColorAccessor.type          = TINYGLTF_TYPE_VEC4;
+
+					GLTFModel.accessors.push_back(ColorAccessor);
+					VertexColorAccessorIdx = GLTFModel.accessors.size() - 1;
+
+					FloatData = FloatData.subspan(4);
 				}
 
 				// TexCoord
@@ -455,6 +487,7 @@ void HGMHandler(
 					VertexNormalAccessorIdx,
 					VertexTangentAccessorIdx,
 					VertexTexCoordAccessorIdx,
+					VertexColorAccessorIdx,
 				}
 			);
 
@@ -588,6 +621,10 @@ void HGMHandler(
 				if( Geo[4] >= 0 )
 				{
 					NewPrimitive.attributes["TEXCOORD_0"] = Geo[4];
+				}
+				if( Geo[5] >= 0 )
+				{
+					NewPrimitive.attributes["COLOR_0"] = Geo[5];
 				}
 				NewPrimitive.material = MaterialLUT.at(MaterialName);
 				NewPrimitive.mode     = TINYGLTF_MODE_TRIANGLE_STRIP;
