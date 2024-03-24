@@ -474,14 +474,27 @@ void HGMHandler(
 			NewMaterial.name        = MaterialName;
 			NewMaterial.doubleSided = true;
 			NewMaterial.pbrMetallicRoughness.baseColorFactor
-				= {1.0F, 1.0F, 1.0F, 1.0F};
+				= {1.0f, 1.0f, 1.0f, 1.0f};
 
 			PrintFormattedBytes(CurChunkData, "s");
 			char TextureName[256];
 			CurChunkData = ReadFormattedBytes(
 				CurChunkData, "s", TextureName, &MaterialType
 			);
-			CurChunkData = PrintFormattedBytes(CurChunkData, "ffff");
+
+			// BaseColor
+			glm::vec4 BaseColor;
+			PrintFormattedBytes(CurChunkData, "ffff");
+			CurChunkData = ReadFormattedBytes(
+				CurChunkData, "ffff", &BaseColor[0], &BaseColor[1],
+				&BaseColor[2], &BaseColor[3]
+			);
+			NewMaterial.pbrMetallicRoughness.baseColorFactor = {
+				BaseColor.r,
+				BaseColor.g,
+				BaseColor.b,
+				BaseColor.a,
+			};
 
 			if( MaterialType > 0 )
 			{
@@ -497,6 +510,7 @@ void HGMHandler(
 			case 7:
 			{
 				std::uint32_t Count;
+				PrintFormattedBytes(CurChunkData, "l");
 				CurChunkData = ReadFormattedBytes(CurChunkData, "l", &Count);
 				for( std::size_t i = 0; i < Count; ++i )
 				{
