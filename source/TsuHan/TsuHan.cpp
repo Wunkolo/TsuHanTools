@@ -205,6 +205,7 @@ void HGMHandler(
 	GLTFModel.scenes.push_back(GLTFScene);
 
 	std::unordered_map<std::string, std::array<std::int32_t, 16>> GeometryLUT;
+	std::unordered_map<std::string, std::uint32_t>                MeshLUT;
 	std::unordered_map<std::string, std::uint32_t>                MaterialLUT;
 	std::unordered_map<std::string, std::uint32_t>                TextureLUT;
 	std::unordered_map<std::string, std::uint32_t>                TransformLUT;
@@ -580,13 +581,7 @@ void HGMHandler(
 			}
 
 			GLTFModel.meshes.push_back(NewMesh);
-
-			// Todo, move the scene node/hiearchy stuff
-			tinygltf::Node NewNode;
-			NewNode.name = MeshName;
-			NewNode.mesh = GLTFModel.meshes.size() - 1;
-
-			GLTFModel.nodes.push_back(NewNode);
+			MeshLUT.emplace(MeshName, GLTFModel.meshes.size() - 1);
 			break;
 		}
 		case TagID::Texture:
@@ -760,9 +755,14 @@ void HGMHandler(
 							Node.children.push_back(ChildNodeIndex);
 						}
 						// 2: Set Mesh
-						else if( AttributeType == 2 )
+						else if( ChildAttributeType == 2 )
 						{
-							// const auto MeshIndex = GeometryLUT.at(NodeName);
+							const auto MeshIndex = MeshLUT.at(ChildNodeName);
+
+							const auto CurrentNodeIndex
+								= TransformLUT.at(CurrentNodeName);
+							auto& Node = GLTFModel.nodes.at(CurrentNodeIndex);
+							Node.mesh  = MeshIndex;
 							// auto&      Node      =
 							// GLTFModel.nodes.at(NodeIndex);
 						}
