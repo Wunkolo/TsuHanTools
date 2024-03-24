@@ -35,8 +35,8 @@ const char* ToString(TagID Tag)
 		return "Unknown8";
 	case TagID::Unknown9:
 		return "Unknown9";
-	case TagID::Unknown10:
-		return "Unknown10";
+	case TagID::SceneDescriptor:
+		return "SceneDescriptor";
 	case TagID::Bone:
 		return "Bone";
 	default:
@@ -53,7 +53,7 @@ std::size_t GetVertexBufferStride(std::uint16_t VertexAttributeMask)
 
 	for( std::uint8_t i = 0; i < 16; ++i )
 	{
-		if( (VertexAttributeMask >> i) & 1 )
+		if( ((VertexAttributeMask >> i) & 1) != 0 )
 		{
 			Result += VertexAttributeSize[i];
 		}
@@ -100,6 +100,10 @@ std::span<const std::byte>
 			Bytes = Bytes.subspan(sizeof(std::uint32_t));
 			break;
 		}
+		default:
+		{
+			break;
+		}
 		}
 	}
 	va_end(Args);
@@ -107,7 +111,9 @@ std::span<const std::byte>
 	return Bytes;
 }
 
-static std::span<const std::byte>
+namespace
+{
+std::span<const std::byte>
 	PrintFormattedBytes(std::span<const std::byte> Bytes, const char* Format)
 {
 	for( const char& Token : std::string_view(Format) )
@@ -157,7 +163,7 @@ static std::span<const std::byte>
 }
 
 template<class ForwardIt>
-static ForwardIt max_element_nth(ForwardIt first, ForwardIt last, int n)
+ForwardIt max_element_nth(ForwardIt first, ForwardIt last, int n)
 {
 	if( first == last )
 	{
@@ -174,6 +180,7 @@ static ForwardIt max_element_nth(ForwardIt first, ForwardIt last, int n)
 	}
 	return largest;
 }
+} // namespace
 
 void HGMHandler(
 	std::span<const std::byte> FileData, std::filesystem::path FilePath
@@ -195,7 +202,7 @@ void HGMHandler(
 	std::unordered_map<std::string, std::uint32_t>                MaterialLUT;
 	std::unordered_map<std::string, std::uint32_t>                TextureLUT;
 
-	while( FileData.size() )
+	while( !FileData.empty() )
 	{
 		const Chunk& CurChunk
 			= *reinterpret_cast<const Chunk*>(FileData.data());
@@ -234,7 +241,7 @@ void HGMHandler(
 				&Header.UnknownSkip
 			);
 
-			if( Header.UnknownSkip )
+			if( Header.UnknownSkip != 0U )
 			{
 				break;
 			}
@@ -387,7 +394,8 @@ void HGMHandler(
 
 			const std::span<const std::uint16_t> IndexData{
 				reinterpret_cast<const std::uint16_t*>(CurChunkData.data()),
-				CurIndexCount};
+				CurIndexCount
+			};
 
 			// Add vertex data to gltf
 			std::int32_t IndexAccessorIdx = -1;
@@ -458,31 +466,56 @@ void HGMHandler(
 			NewMaterial.name        = MaterialName;
 			NewMaterial.doubleSided = true;
 			NewMaterial.pbrMetallicRoughness.baseColorFactor
-				= {1.0f, 1.0f, 1.0f, 1.0f};
+				= {1.0F, 1.0F, 1.0F, 1.0F};
 
-			if( MaterialType <= 8 )
+			PrintFormattedBytes(CurChunkData, "s");
+			char TextureName[256];
+			CurChunkData = ReadFormattedBytes(
+				CurChunkData, "s", TextureName, &MaterialType
+			);
+			CurChunkData = PrintFormattedBytes(CurChunkData, "ffff");
+
+			if( MaterialType > 0 )
 			{
-				PrintFormattedBytes(CurChunkData, "s");
-				char TextureName[256];
-				CurChunkData = ReadFormattedBytes(
-					CurChunkData, "s", TextureName, &MaterialType
-				);
-				if( std::string_view(TextureName) != "__NOTEX__" )
+				CurChunkData = PrintFormattedBytes(CurChunkData, "ffff");
+			}
+
+			switch( MaterialType )
+			{
+			case 2:
+			case 3:
+			case 4:
+			case 6:
+			case 7:
+			{
+				std::uint32_t Count;
+				CurChunkData = ReadFormattedBytes(CurChunkData, "l", &Count);
+				for( std::size_t i = 0; i < Count; ++i )
 				{
-					if( !TextureLUT.contains(TextureName) )
-					{
-						// Texture might not exist yet, put a place-holder for
-						// now
-						GLTFModel.textures.push_back({});
-						TextureLUT.emplace(
-							TextureName, GLTFModel.textures.size() - 1
-						);
-					}
-					NewMaterial.pbrMetallicRoughness.baseColorTexture.texCoord
-						= 0;
-					NewMaterial.pbrMetallicRoughness.baseColorTexture.index
-						= TextureLUT.at(TextureName);
+					CurChunkData = PrintFormattedBytes(CurChunkData, "s");
 				}
+				break;
+			}
+			default:
+			{
+				break;
+			}
+			}
+
+			if( std::string_view(TextureName) != "__NOTEX__" )
+			{
+				if( !TextureLUT.contains(TextureName) )
+				{
+					// Texture might not exist yet, put a place-holder
+					// for now
+					GLTFModel.textures.push_back({});
+					TextureLUT.emplace(
+						TextureName, GLTFModel.textures.size() - 1
+					);
+				}
+				NewMaterial.pbrMetallicRoughness.baseColorTexture.texCoord = 0;
+				NewMaterial.pbrMetallicRoughness.baseColorTexture.index
+					= TextureLUT.at(TextureName);
 			}
 			GLTFModel.materials.push_back(NewMaterial);
 			MaterialLUT.emplace(MaterialName, GLTFModel.materials.size() - 1);
@@ -515,15 +548,25 @@ void HGMHandler(
 				const auto&         Geo = GeometryLUT.at(GeometryName);
 				tinygltf::Primitive NewPrimitive;
 				if( Geo[0] >= 0 )
+				{
 					NewPrimitive.indices = Geo[0];
+				}
 				if( Geo[1] >= 0 )
+				{
 					NewPrimitive.attributes["POSITION"] = Geo[1];
+				}
 				if( Geo[2] >= 0 )
+				{
 					NewPrimitive.attributes["NORMAL"] = Geo[2];
+				}
 				if( Geo[3] >= 0 )
+				{
 					NewPrimitive.attributes["TANGENT"] = Geo[3];
+				}
 				if( Geo[4] >= 0 )
+				{
 					NewPrimitive.attributes["TEXCOORD_0"] = Geo[4];
+				}
 				NewPrimitive.material = MaterialLUT.at(MaterialName);
 				NewPrimitive.mode     = TINYGLTF_MODE_TRIANGLE_STRIP;
 				NewMesh.primitives.push_back(NewPrimitive);
@@ -606,26 +649,51 @@ void HGMHandler(
 		}
 		case TagID::Unknown7:
 		{
+			// Nothing seems to use this
 			// sssll
 			CurChunkData = PrintFormattedBytes(CurChunkData, "sssll");
 			break;
 		}
 		case TagID::Unknown8:
 		{
+			// Nothing seems to use this
 			// sl
 			CurChunkData = PrintFormattedBytes(CurChunkData, "sl");
 			break;
 		}
 		case TagID::Unknown9:
 		{
+			// Nothing seems to use this
 			// sl
+
 			CurChunkData = PrintFormattedBytes(CurChunkData, "sl");
 			break;
 		}
-		case TagID::Unknown10:
+		case TagID::SceneDescriptor:
 		{
 			// sll
-			CurChunkData = PrintFormattedBytes(CurChunkData, "sll");
+			const auto ReadNode = [&](std::span<const std::byte> Data
+								  ) -> std::span<const std::byte> {
+				const auto ReadNodeImpl
+					= [&](std::span<const std::byte> /*Data*/,
+						  auto& self) -> std::span<const std::byte> {
+					PrintFormattedBytes(CurChunkData, "sll");
+					char          Name[256];
+					std::uint32_t DescriptorType;
+					std::uint32_t ChildrenCount;
+					CurChunkData = ReadFormattedBytes(
+						CurChunkData, "sll", Name, &DescriptorType,
+						&ChildrenCount
+					);
+					for( std::size_t i = 0; i < ChildrenCount; ++i )
+					{
+						std::printf("\t-Child:%zu\n", i);
+						self(CurChunkData, self);
+					}
+				};
+				return ReadNodeImpl(Data, ReadNodeImpl);
+			};
+			CurChunkData = ReadNode(CurChunkData);
 			break;
 		}
 		case TagID::Bone:

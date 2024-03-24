@@ -16,16 +16,16 @@ namespace HGM
 
 enum class TagID : std::uint32_t
 {
-	Geometry  = 0,
-	Material  = 1,
-	Mesh      = 2,
-	Texture   = 3,
-	Transform = 4,
-	Unknown7  = 7,
-	Unknown8  = 8,
-	Unknown9  = 9,
-	Unknown10 = 10,
-	Bone      = 11,
+	Geometry        = 0,
+	Material        = 1,
+	Mesh            = 2,
+	Texture         = 3,
+	Transform       = 4,
+	Unknown7        = 7,
+	Unknown8        = 8,
+	Unknown9        = 9,
+	SceneDescriptor = 10,
+	Bone            = 11,
 };
 
 const char* ToString(TagID Tag);

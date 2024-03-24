@@ -1,5 +1,3 @@
-#include <algorithm>
-#include <cinttypes>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -38,7 +36,7 @@ int main(int argc, char* argv[])
 		std::printf("%s\n", FileName.c_str());
 		if( TsuHan::PackInfo.contains(FileName) )
 		{
-			const auto PackInfo = TsuHan::PackInfo.at(FileName);
+			const auto& PackInfo = TsuHan::PackInfo.at(FileName);
 			ProcessPack(DumpPath, CurPath, PackInfo);
 		}
 		else
