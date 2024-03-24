@@ -672,6 +672,7 @@ void HGMHandler(
 		case TagID::SceneDescriptor:
 		{
 			// sll
+			// Todo: Recursive lambda
 			const auto ReadNode = [&](std::span<const std::byte> Data
 								  ) -> std::span<const std::byte> {
 				const auto ReadNodeImpl
@@ -688,8 +689,9 @@ void HGMHandler(
 					for( std::size_t i = 0; i < ChildrenCount; ++i )
 					{
 						std::printf("\t-Child:%zu\n", i);
-						self(CurChunkData, self);
+						CurChunkData = self(CurChunkData, self);
 					}
+					return CurChunkData;
 				};
 				return ReadNodeImpl(Data, ReadNodeImpl);
 			};
