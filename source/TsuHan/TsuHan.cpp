@@ -270,6 +270,7 @@ void HGMHandler(
 			std::int32_t VertexNormalAccessorIdx   = -1;
 			std::int32_t VertexTangentAccessorIdx  = -1;
 			std::int32_t VertexColorAccessorIdx    = -1;
+			std::int32_t VertexWeights0AccessorIdx = -1;
 			std::int32_t VertexTexCoordAccessorIdx = -1;
 			{
 				tinygltf::Buffer VertexBuffer;
@@ -387,6 +388,29 @@ void HGMHandler(
 					FloatData = FloatData.subspan(4);
 				}
 
+				//  Weights 0
+				if( const std::uint32_t AttribMask = 0b0000'1'0000'00'0000;
+					Header.VertexAttributeMask & AttribMask )
+				{
+					tinygltf::Accessor WeightsAccessor;
+					WeightsAccessor.bufferView
+						= GLTFModel.bufferViews.size() - 1;
+					WeightsAccessor.byteOffset = GetVertexBufferStride(
+						(AttribMask - 1) & Header.VertexAttributeMask
+					);
+					WeightsAccessor.maxValues = {+1.0, +1.0, +1.0, +1.0};
+					WeightsAccessor.minValues = {0.0, 0.0, 0.0, 0.0};
+					WeightsAccessor.componentType
+						= TINYGLTF_COMPONENT_TYPE_FLOAT;
+					WeightsAccessor.count = VertexCount;
+					WeightsAccessor.type  = TINYGLTF_TYPE_VEC4;
+
+					GLTFModel.accessors.push_back(WeightsAccessor);
+					VertexWeights0AccessorIdx = GLTFModel.accessors.size() - 1;
+
+					FloatData = FloatData.subspan(4);
+				}
+
 				// TexCoord
 				if( const std::uint32_t AttribMask = 0b0001'0'0000'00'0000;
 					Header.VertexAttributeMask & AttribMask )
@@ -406,6 +430,7 @@ void HGMHandler(
 
 					GLTFModel.accessors.push_back(TexCoordAccessor);
 					VertexTexCoordAccessorIdx = GLTFModel.accessors.size() - 1;
+					FloatData                 = FloatData.subspan(2);
 				}
 			}
 
@@ -488,6 +513,7 @@ void HGMHandler(
 					VertexTangentAccessorIdx,
 					VertexTexCoordAccessorIdx,
 					VertexColorAccessorIdx,
+					VertexWeights0AccessorIdx,
 				}
 			);
 
@@ -624,7 +650,11 @@ void HGMHandler(
 				}
 				if( Geo[5] >= 0 )
 				{
-					NewPrimitive.attributes["COLOR_0"] = Geo[5];
+					NewPrimitive.attributes["WEIGHTS_0"] = Geo[5];
+				}
+				if( Geo[6] >= 0 )
+				{
+					NewPrimitive.attributes["COLOR_0"] = Geo[6];
 				}
 				NewPrimitive.material = MaterialLUT.at(MaterialName);
 				NewPrimitive.mode     = TINYGLTF_MODE_TRIANGLE_STRIP;
