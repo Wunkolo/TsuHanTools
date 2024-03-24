@@ -9,6 +9,12 @@
 
 #include <mio/mmap.hpp>
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/euler_angles.hpp>
+#include <glm/gtx/range.hpp>
+
 namespace TsuHan
 {
 
@@ -201,6 +207,7 @@ void HGMHandler(
 	std::unordered_map<std::string, std::array<std::int32_t, 16>> GeometryLUT;
 	std::unordered_map<std::string, std::uint32_t>                MaterialLUT;
 	std::unordered_map<std::string, std::uint32_t>                TextureLUT;
+	std::unordered_map<std::string, std::uint32_t>                TransformLUT;
 
 	while( !FileData.empty() )
 	{
@@ -644,7 +651,43 @@ void HGMHandler(
 		case TagID::Transform:
 		{
 			// sllllllllll
-			CurChunkData = PrintFormattedBytes(CurChunkData, "slffflllfff");
+			PrintFormattedBytes(CurChunkData, "slfffffffff");
+			char          TransformName[256];
+			std::uint32_t Unknown1;
+			glm::vec3     Position = {};
+			glm::vec3     Rotation = {};
+			glm::vec3     Scale    = {};
+
+			CurChunkData = ReadFormattedBytes(
+				CurChunkData, "slfffffffff", TransformName, &Unknown1,
+				&Position[0], &Position[1], &Position[2], &Rotation[0],
+				&Rotation[1], &Rotation[2], &Scale[0], &Scale[1], &Scale[2]
+			);
+
+			tinygltf::Node NewNode;
+
+			NewNode.name = TransformName;
+
+			std::copy(
+				glm::begin(Position), glm::end(Position),
+				std::back_inserter(NewNode.translation)
+			);
+
+			const glm::quat RotationQuat = glm::quat(glm::radians(Rotation));
+
+			NewNode.rotation.push_back(RotationQuat[0]);
+			NewNode.rotation.push_back(RotationQuat[1]);
+			NewNode.rotation.push_back(RotationQuat[2]);
+			NewNode.rotation.push_back(RotationQuat[3]);
+
+			std::copy(
+				glm::begin(Scale), glm::end(Scale),
+				std::back_inserter(NewNode.scale)
+			);
+
+			GLTFModel.nodes.push_back(NewNode);
+			TransformLUT.emplace(TransformName, GLTFModel.nodes.size() - 1);
+
 			break;
 		}
 		case TagID::Unknown7:
@@ -672,25 +715,68 @@ void HGMHandler(
 		case TagID::SceneDescriptor:
 		{
 			// sll
+			// Object name, Property name
 			// Todo: Recursive lambda
 			const auto ReadNode = [&](std::span<const std::byte> Data
 								  ) -> std::span<const std::byte> {
-				const auto ReadNodeImpl
+				std::size_t TabLevel = 0;
+				const auto  ReadNodeImpl
 					= [&](std::span<const std::byte> /*Data*/,
 						  auto& self) -> std::span<const std::byte> {
-					PrintFormattedBytes(CurChunkData, "sll");
-					char          Name[256];
-					std::uint32_t DescriptorType;
+					++TabLevel;
+					// PrintFormattedBytes(CurChunkData, "sll");
+					char          CurrentNodeName[256];
+					std::uint32_t AttributeType;
 					std::uint32_t ChildrenCount;
 					CurChunkData = ReadFormattedBytes(
-						CurChunkData, "sll", Name, &DescriptorType,
+						CurChunkData, "sll", CurrentNodeName, &AttributeType,
 						&ChildrenCount
 					);
+					std::printf(
+						"%*s-%s(%u)\n", TabLevel * 5, "", CurrentNodeName,
+						AttributeType
+					);
+
+					// Iterate children data:
+					std::span<const std::byte> ChildrenData = CurChunkData;
 					for( std::size_t i = 0; i < ChildrenCount; ++i )
 					{
-						std::printf("\t-Child:%zu\n", i);
+						char          ChildNodeName[256];
+						std::uint32_t ChildAttributeType;
+						std::uint32_t ChildChildrenCount;
+						ChildrenData = ReadFormattedBytes(
+							ChildrenData, "sll", ChildNodeName,
+							&ChildAttributeType, &ChildChildrenCount
+						);
+
+						// 4: Set child
+						if( ChildAttributeType == 4 )
+						{
+							const auto CurrentNodeIndex
+								= TransformLUT.at(CurrentNodeName);
+							const auto ChildNodeIndex
+								= TransformLUT.at(ChildNodeName);
+							auto& Node = GLTFModel.nodes.at(CurrentNodeIndex);
+							Node.children.push_back(ChildNodeIndex);
+						}
+						// 2: Set Mesh
+						else if( AttributeType == 2 )
+						{
+							// const auto MeshIndex = GeometryLUT.at(NodeName);
+							// auto&      Node      =
+							// GLTFModel.nodes.at(NodeIndex);
+						}
+					}
+
+					for( std::size_t i = 0; i < ChildrenCount; ++i )
+					{
+						// std::printf(
+						//	"%*s-Child:%zu/%zu\n", TabLevel * 5, "", i,
+						//	ChildrenCount
+						//);
 						CurChunkData = self(CurChunkData, self);
 					}
+					--TabLevel;
 					return CurChunkData;
 				};
 				return ReadNodeImpl(Data, ReadNodeImpl);
@@ -721,8 +807,8 @@ void HGMHandler(
 		true, // embedImages
 		true, // embedBuffers
 		true, // pretty print
-		false
-	); // write binary
+		false // write binary
+	);
 }
 } // namespace HGM
 } // namespace TsuHan
