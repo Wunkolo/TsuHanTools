@@ -396,6 +396,13 @@ void HGMHandler(
 					FloatData = FloatData.subspan(4);
 				}
 
+				//  Weight {0,1,2,3}
+				if( const std::uint32_t AttribMask = 0b0000'0'1111'00'0000;
+					Header.VertexAttributeMask & AttribMask )
+				{
+					const std::size_t WeightCount = std::popcount(
+						Header.VertexAttributeMask & AttribMask
+					);
 					tinygltf::Accessor WeightsAccessor;
 					WeightsAccessor.bufferView
 						= GLTFModel.bufferViews.size() - 1;
@@ -407,10 +414,50 @@ void HGMHandler(
 					WeightsAccessor.componentType
 						= TINYGLTF_COMPONENT_TYPE_FLOAT;
 					WeightsAccessor.count = VertexCount;
-					WeightsAccessor.type  = TINYGLTF_TYPE_VEC4;
+					// switch( WeightCount )
+					// {
+					// case 1:
+					// 	WeightsAccessor.type = TINYGLTF_TYPE_SCALAR;
+					// 	break;
+					// case 2:
+					// 	WeightsAccessor.type = TINYGLTF_TYPE_VEC2;
+					// 	break;
+					// case 3:
+					// 	WeightsAccessor.type = TINYGLTF_TYPE_VEC3;
+					// 	break;
+					// case 4:
+					// 	WeightsAccessor.type = TINYGLTF_TYPE_VEC4;
+					// 	break;
+					// }
+
+					WeightsAccessor.type = TINYGLTF_TYPE_VEC4;
 
 					GLTFModel.accessors.push_back(WeightsAccessor);
-					VertexWeights0AccessorIdx = GLTFModel.accessors.size() - 1;
+					// VertexWeightsAccessorIdx = GLTFModel.accessors.size() -
+					// 1;
+
+					FloatData = FloatData.subspan(WeightCount);
+				}
+
+				//  Joints
+				if( const std::uint32_t AttribMask = 0b0000'1'0000'00'0000;
+					Header.VertexAttributeMask & AttribMask )
+				{
+					tinygltf::Accessor JointsAccessor;
+					JointsAccessor.bufferView
+						= GLTFModel.bufferViews.size() - 1;
+					JointsAccessor.byteOffset = GetVertexBufferStride(
+						(AttribMask - 1) & Header.VertexAttributeMask
+					);
+					JointsAccessor.maxValues = {+255.0, +255.0, +255.0, +255.0};
+					JointsAccessor.minValues = {0.0, 0.0, 0.0, 0.0};
+					JointsAccessor.componentType
+						= TINYGLTF_COMPONENT_TYPE_FLOAT;
+					JointsAccessor.count = VertexCount;
+					JointsAccessor.type  = TINYGLTF_TYPE_VEC4;
+
+					GLTFModel.accessors.push_back(JointsAccessor);
+					// VertexJointsAccessorIdx = GLTFModel.accessors.size() - 1;
 
 					FloatData = FloatData.subspan(4);
 				}
