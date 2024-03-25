@@ -850,8 +850,7 @@ void HGMHandler(
 		case TagID::SceneDescriptor:
 		{
 			// sll
-			// Object name, Property name
-			// Todo: Recursive lambda
+			// Object name, Property name, Attribute type?
 			const auto ReadNode = [&](std::span<const std::byte> Data
 								  ) -> std::span<const std::byte> {
 				std::size_t TabLevel = 0;
@@ -862,26 +861,30 @@ void HGMHandler(
 					// PrintFormattedBytes(CurChunkData, "sll");
 					char          CurrentNodeName[256];
 					std::uint32_t AttributeType;
-					std::uint32_t ChildrenCount;
+					std::uint32_t ParentChildrenCount;
 					CurChunkData = ReadFormattedBytes(
 						CurChunkData, "sll", CurrentNodeName, &AttributeType,
-						&ChildrenCount
+						&ParentChildrenCount
 					);
 					std::printf(
-						"%*s-%s(%u)\n", TabLevel * 5, "", CurrentNodeName,
+						"%*s-%s(%u)\n", TabLevel * 2, "", CurrentNodeName,
 						AttributeType
 					);
 
 					// Iterate children data:
-					std::span<const std::byte> ChildrenData = CurChunkData;
-					for( std::size_t i = 0; i < ChildrenCount; ++i )
+					for( std::size_t i = 0; i < ParentChildrenCount; ++i )
 					{
 						char          ChildNodeName[256];
 						std::uint32_t ChildAttributeType;
 						std::uint32_t ChildChildrenCount;
-						ChildrenData = ReadFormattedBytes(
-							ChildrenData, "sll", ChildNodeName,
+						ReadFormattedBytes(
+							CurChunkData, "sll", ChildNodeName,
 							&ChildAttributeType, &ChildChildrenCount
+						);
+
+						std::printf(
+							"%*s-Child:%zu/%zu\n", TabLevel * 2, "", i + 1,
+							ParentChildrenCount
 						);
 
 						// 4: Set child
@@ -907,14 +910,7 @@ void HGMHandler(
 							// auto&      Node      =
 							// GLTFModel.nodes.at(NodeIndex);
 						}
-					}
 
-					for( std::size_t i = 0; i < ChildrenCount; ++i )
-					{
-						// std::printf(
-						//	"%*s-Child:%zu/%zu\n", TabLevel * 5, "", i,
-						//	ChildrenCount
-						//);
 						CurChunkData = self(CurChunkData, self);
 					}
 					--TabLevel;
