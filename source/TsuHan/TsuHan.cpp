@@ -197,6 +197,12 @@ void HGMHandler(
 	GLTFAsset.version   = "2.0";
 
 	tinygltf::Model GLTFModel;
+	GLTFModel.extensionsUsed = {
+		"KHR_materials_unlit",
+	};
+	GLTFModel.extensionsRequired = {
+		// Unlit not needed
+	};
 
 	tinygltf::Scene GLTFScene;
 	GLTFScene.name = FilePath.filename();
@@ -584,8 +590,11 @@ void HGMHandler(
 			tinygltf::Material NewMaterial;
 			NewMaterial.name        = MaterialName;
 			NewMaterial.doubleSided = true;
+
+			NewMaterial.pbrMetallicRoughness.metallicFactor = 0.0;
 			NewMaterial.pbrMetallicRoughness.baseColorFactor
 				= {1.0f, 1.0f, 1.0f, 1.0f};
+			NewMaterial.extensions["KHR_materials_unlit"] = {};
 
 			PrintFormattedBytes(CurChunkData, "s");
 			char TextureName[256];
