@@ -221,6 +221,7 @@ class GLTFConverter final : public HGMVisitor
 	std::unordered_map<std::string, std::array<std::int32_t, 16>> GeometryLUT;
 	std::unordered_map<std::string, std::uint32_t>                MeshLUT;
 	std::unordered_map<std::string, std::uint32_t>                MaterialLUT;
+	std::unordered_map<std::string, std::uint32_t>                SkinLUT;
 	std::unordered_map<std::string, std::uint32_t>                TextureLUT;
 	std::unordered_map<std::string, std::uint32_t>                TransformLUT;
 
@@ -444,41 +445,79 @@ public:
 			if( const std::uint32_t AttribMask = 0b0000'0'1111'00'0000;
 				Header.VertexAttributeMask & AttribMask )
 			{
-				const std::size_t WeightCount
-					= std::popcount(Header.VertexAttributeMask & AttribMask);
-				tinygltf::Accessor WeightsAccessor;
+				// Mask of all active weights
+				const std::uint32_t WeightMask
+					= Header.VertexAttributeMask & AttribMask;
+				const std::size_t WeightCount = std::popcount(WeightMask);
+				// Mask of the lowest active weight
+				const std::uint32_t WeightMaskLow = -WeightMask & WeightMask;
+				tinygltf::Accessor  WeightsAccessor;
 				WeightsAccessor.name
 					= WeightsAccessor.name + Header.Name + ": Weights";
 				WeightsAccessor.bufferView = GLTFModel.bufferViews.size() - 1;
 				WeightsAccessor.byteOffset = GetVertexBufferStride(
-					(AttribMask - 1) & Header.VertexAttributeMask
+					(WeightMaskLow - 1) & Header.VertexAttributeMask
 				);
 				WeightsAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
 				WeightsAccessor.count         = VertexCount;
-				// switch( WeightCount )
-				// {
-				// case 1:
-				// 	WeightsAccessor.type = TINYGLTF_TYPE_SCALAR;
-				// 	break;
-				// case 2:
-				// 	WeightsAccessor.type = TINYGLTF_TYPE_VEC2;
-				// 	break;
-				// case 3:
-				// 	WeightsAccessor.type = TINYGLTF_TYPE_VEC3;
-				// 	break;
-				// case 4:
-				// 	WeightsAccessor.type = TINYGLTF_TYPE_VEC4;
-				// 	break;
-				// }
+				WeightsAccessor.type          = TINYGLTF_TYPE_VEC4;
 
-				WeightsAccessor.type = TINYGLTF_TYPE_VEC4;
 				AccessorMinMax<glm::vec4>(
 					VertexData, VertexBufferView, WeightsAccessor
 				);
 
+				////
+				// The weights are stored as a variable amount of floats
+				// Use the first float to encode four normalized-bytes
+				WeightsAccessor.componentType
+					= TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
+				WeightsAccessor.normalized = true;
+				for( std::size_t VertexIdx = 0; VertexIdx < VertexCount;
+					 ++VertexIdx )
+				{
+					const std::span<std::uint8_t> CurWeightBytes
+						= std::span(VertexBuffer.data)
+							  .subspan(
+								  VertexIdx * VertexBufferView.byteStride
+								  + WeightsAccessor.byteOffset
+							  );
+
+					const std::span<const float> CurWeightData(
+						reinterpret_cast<const float*>(CurWeightBytes.data()),
+						WeightCount
+					);
+
+					// Read float values into a vec4
+					glm::vec4 CurWeights = {};
+					std::copy(
+						CurWeightData.begin(),
+						CurWeightData.begin() + WeightCount,
+						glm::begin(CurWeights)
+					);
+
+					// Store normalized bytes into the first word
+					std::span<std::uint8_t, 4> DestBytes
+						= CurWeightBytes.first<4>();
+					DestBytes[0] = static_cast<std::uint8_t>(
+						glm::round(CurWeights[0] * 0xff)
+					);
+					DestBytes[1] = static_cast<std::uint8_t>(
+						glm::round(CurWeights[1] * 0xff)
+					);
+					DestBytes[2] = static_cast<std::uint8_t>(
+						glm::round(CurWeights[2] * 0xff)
+					);
+					DestBytes[3] = static_cast<std::uint8_t>(
+						glm::round(CurWeights[3] * 0xff)
+					);
+				}
+				AccessorMinMax<glm::u8vec4>(
+					VertexData, VertexBufferView, WeightsAccessor
+				);
+				////
+
 				GLTFModel.accessors.push_back(WeightsAccessor);
-				// VertexWeightsAccessorIdx = GLTFModel.accessors.size() -
-				// 1;
+				VertexWeightsAccessorIdx = GLTFModel.accessors.size() - 1;
 
 				FloatData = FloatData.subspan(WeightCount);
 			}
@@ -502,7 +541,7 @@ public:
 				);
 
 				GLTFModel.accessors.push_back(JointsAccessor);
-				// VertexJointsAccessorIdx = GLTFModel.accessors.size() - 1;
+				VertexJointsAccessorIdx = GLTFModel.accessors.size() - 1;
 
 				FloatData = FloatData.subspan(4);
 			}
@@ -647,6 +686,7 @@ public:
 
 		if( MaterialType > 0 )
 		{
+			// Texture offset/scale?
 			Data = PrintFormattedBytes(Data, "ffff");
 		}
 
@@ -658,12 +698,34 @@ public:
 		case 6:
 		case 7:
 		{
-			std::uint32_t Count;
+			// List of bones used for skinning
+			std::uint32_t BoneCount;
 			PrintFormattedBytes(Data, "l");
-			Data = ReadFormattedBytes(Data, "l", &Count);
-			for( std::size_t i = 0; i < Count; ++i )
+			Data = ReadFormattedBytes(Data, "l", &BoneCount);
+
+			if( BoneCount != 0u )
 			{
-				Data = PrintFormattedBytes(Data, "s");
+				tinygltf::Skin NewSkin;
+				NewSkin.name = MaterialName;
+
+				char BoneName[256];
+				for( std::size_t i = 0; i < BoneCount; ++i )
+				{
+					PrintFormattedBytes(Data, "s");
+					Data = ReadFormattedBytes(Data, "s", BoneName);
+
+					// The names of these bones might not actually exist in the
+					// HGM yet, and might be referring to another skeleton in
+					// another file in the case of cosmetics. Need a way to do
+					// references across files
+					if( TransformLUT.contains(BoneName) )
+					{
+						NewSkin.joints.push_back(TransformLUT.at(BoneName));
+					}
+				}
+
+				GLTFModel.skins.push_back(NewSkin);
+				SkinLUT.emplace(MaterialName, GLTFModel.skins.size() - 1);
 			}
 			break;
 		}
@@ -783,11 +845,11 @@ public:
 		GLTFModel.bufferViews.push_back(ImageBufferView);
 
 		tinygltf::Image NewImage;
-		NewImage.name     = TextureName;
-		NewImage.mimeType = "image/tga";
+		NewImage.name = TextureName;
 
-		// NewImage.bufferView = GLTFModel.bufferViews.size() - 1;
-		NewImage.uri = TextureFileNameUpper;
+		NewImage.bufferView = GLTFModel.bufferViews.size() - 1;
+		NewImage.mimeType   = "image/tga";
+		// NewImage.uri        = TextureFileNameUpper;
 
 		GLTFModel.images.push_back(NewImage);
 
