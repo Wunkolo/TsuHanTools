@@ -762,9 +762,12 @@ void HGMHandler(
 			GLTFModel.bufferViews.push_back(ImageBufferView);
 
 			tinygltf::Image NewImage;
-			NewImage.name       = TextureName;
-			NewImage.mimeType   = "image/tga";
-			NewImage.bufferView = GLTFModel.bufferViews.size() - 1;
+			NewImage.name     = TextureName;
+			NewImage.mimeType = "image/tga";
+
+			// NewImage.bufferView = GLTFModel.bufferViews.size() - 1;
+			NewImage.uri = TextureFileNameUpper;
+
 			GLTFModel.images.push_back(NewImage);
 
 			tinygltf::Texture NewTexture;
