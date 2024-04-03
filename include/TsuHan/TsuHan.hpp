@@ -35,15 +35,42 @@ std::size_t GetVertexBufferStride(std::uint16_t VertexAttributeMask);
 std::span<const std::byte>
 	ReadFormattedBytes(std::span<const std::byte> Bytes, const char* Format...);
 
-void HGMHandler(
-	std::span<const std::byte> FileData, std::filesystem::path FilePath
-);
-
 struct Chunk
 {
 	TagID         Tag;
 	std::uint32_t Size;
 };
+
+class HGMVisitor
+{
+protected:
+	const std::filesystem::path FilePath;
+
+public:
+	HGMVisitor(const std::filesystem::path& HGMPath) : FilePath(HGMPath){};
+
+	virtual void BeginHGM()                                            = 0;
+	virtual void EndHGM()                                              = 0;
+	virtual void VisitGeometry(std::span<const std::byte> Data)        = 0;
+	virtual void VisitMaterial(std::span<const std::byte> Data)        = 0;
+	virtual void VisitMesh(std::span<const std::byte> Data)            = 0;
+	virtual void VisitTexture(std::span<const std::byte> Data)         = 0;
+	virtual void VisitTransform(std::span<const std::byte> Data)       = 0;
+	virtual void VisitUnknown7(std::span<const std::byte> Data)        = 0;
+	virtual void VisitUnknown8(std::span<const std::byte> Data)        = 0;
+	virtual void VisitUnknown9(std::span<const std::byte> Data)        = 0;
+	virtual void VisitSceneDescriptor(std::span<const std::byte> Data) = 0;
+	virtual void VisitBone(std::span<const std::byte> Data)            = 0;
+};
+
+void HGMHandler(
+	std::span<const std::byte> FileData, std::filesystem::path FilePath,
+	HGMVisitor& Visitor
+);
+
+void HGMToGLTF(
+	std::span<const std::byte> FileData, std::filesystem::path FilePath
+);
 
 } // namespace HGM
 
@@ -86,7 +113,7 @@ const std::unordered_map<std::string, PackFileInfo> PackInfo = {
 	{
 		"model00.bin",
 		{
-			0x05C573A64, "model/common", ".hgm", HGM::HGMHandler,
+			0x05C573A64, "model/common", ".hgm", HGM::HGMToGLTF,
 			{
 				{"BELTVIBRATOR"          , {0x000000, 0x008F08}},
 				{"BODYBLADE"             , {0x008F08, 0x0069E4}},
@@ -120,7 +147,7 @@ const std::unordered_map<std::string, PackFileInfo> PackInfo = {
 	{
 		"model01.bin",
 		{
-			0x0D8332DC9, "model/japanet", ".hgm", HGM::HGMHandler,
+			0x0D8332DC9, "model/japanet", ".hgm", HGM::HGMToGLTF,
 			{
 				{"MONEYDIAL"             , {0x000000, 0x000712}},
 				{"TSU_HANTV"             , {0x000712, 0x06BF3E}},
@@ -131,7 +158,7 @@ const std::unordered_map<std::string, PackFileInfo> PackInfo = {
 	{
 		"model02.bin",
 		{
-			0x0967B7AC3, "model/indicator", ".hgm", HGM::HGMHandler,
+			0x0967B7AC3, "model/indicator", ".hgm", HGM::HGMToGLTF,
 			{
 				{"CONFIGMENU"            , {0x000000, 0x0042D8}},
 				{"SCREENSAVER"           , {0x0042D8, 0x001D5A}},
@@ -141,7 +168,7 @@ const std::unordered_map<std::string, PackFileInfo> PackInfo = {
 	{
 		"model03.bin",
 		{
-			0x0AB86195F, "model/ending", ".hgm", HGM::HGMHandler,
+			0x0AB86195F, "model/ending", ".hgm", HGM::HGMToGLTF,
 			{
 				{"ENDROLL"               , {0x000000, 0x0050B0}},
 				{"SMOKE"                 , {0x0050B0, 0x0001F4}},
@@ -151,7 +178,7 @@ const std::unordered_map<std::string, PackFileInfo> PackInfo = {
 	{
 		"model04.bin",
 		{
-			0x08795DBBE, "model/osaka", ".hgm", HGM::HGMHandler,
+			0x08795DBBE, "model/osaka", ".hgm", HGM::HGMToGLTF,
 			{
 				{"CHUCHU"                , {0x000000, 0x0074C2}},
 				{"CLOTH"                 , {0x0074C2, 0x00B4F8}},
