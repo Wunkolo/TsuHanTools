@@ -495,7 +495,7 @@ public:
 						glm::begin(CurWeights)
 					);
 
-					// Store normalized bytes into the first word
+					// Re-use the original float values to store four uint8s
 					std::span<std::uint8_t, 4> DestBytes
 						= CurWeightBytes.first<4>();
 					DestBytes[0] = static_cast<std::uint8_t>(
@@ -539,6 +539,47 @@ public:
 				AccessorMinMax<glm::vec4>(
 					VertexData, VertexBufferView, JointsAccessor
 				);
+
+				////
+				// Joints seem to always be integer-valued floats
+				// Convert them to uint16
+				JointsAccessor.componentType
+					= TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+				for( std::size_t VertexIdx = 0; VertexIdx < VertexCount;
+					 ++VertexIdx )
+				{
+
+					const std::span CurJointBytes
+						= std::span(VertexBuffer.data)
+							  .subspan(
+								  VertexIdx * VertexBufferView.byteStride
+								  + JointsAccessor.byteOffset
+							  );
+					const std::span<const float> CurJointData(
+						reinterpret_cast<const float*>(CurJointBytes.data()), 4
+					);
+
+					// Read float values into a vec4
+					glm::vec4 CurJoints = {};
+					std::copy(
+						CurJointData.begin(), CurJointData.end(),
+						glm::begin(CurJoints)
+					);
+
+					// Re-use the original float values to store four uint16s
+					std::span<std::uint16_t, 4> DestJoints(
+						reinterpret_cast<std::uint16_t*>(CurJointBytes.data()),
+						4
+					);
+					DestJoints[0] = std::uint16_t(CurJoints[0]);
+					DestJoints[1] = std::uint16_t(CurJoints[1]);
+					DestJoints[2] = std::uint16_t(CurJoints[2]);
+					DestJoints[3] = std::uint16_t(CurJoints[3]);
+				}
+				AccessorMinMax<glm::u16vec4>(
+					VertexData, VertexBufferView, JointsAccessor
+				);
+				////
 
 				GLTFModel.accessors.push_back(JointsAccessor);
 				VertexJointsAccessorIdx = GLTFModel.accessors.size() - 1;
