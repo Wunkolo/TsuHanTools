@@ -186,6 +186,32 @@ ForwardIt max_element_nth(ForwardIt first, ForwardIt last, int n)
 	}
 	return largest;
 }
+
+template<typename T>
+void AccessorMinMax(
+	std::span<const std::byte>  VertexData,
+	const tinygltf::BufferView& VertexBufferView, tinygltf::Accessor& Accessor
+)
+{
+	// Offset to vertex attribute
+	VertexData = VertexData.subspan(Accessor.byteOffset);
+	T CurMin   = *reinterpret_cast<const T*>(VertexData.data());
+	T CurMax   = *reinterpret_cast<const T*>(VertexData.data());
+
+	for( std::size_t VertexIdx = 0; VertexIdx < Accessor.count; ++VertexIdx )
+	{
+		const T& CurElement = *reinterpret_cast<const T*>(VertexData.data());
+
+		CurMin = glm::min(CurMin, CurElement);
+		CurMax = glm::max(CurMax, CurElement);
+
+		// Offset to next vertex
+		VertexData = VertexData.subspan(VertexBufferView.byteStride);
+	}
+
+	Accessor.minValues.assign(glm::begin(CurMin), glm::end(CurMin));
+	Accessor.maxValues.assign(glm::begin(CurMax), glm::end(CurMax));
+}
 } // namespace
 
 class GLTFConverter final : public HGMVisitor
@@ -319,11 +345,13 @@ public:
 				PositionAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
 				);
-				PositionAccessor.maxValues     = {+5.0, +5.0, +5.0};
-				PositionAccessor.minValues     = {-5.0, -5.0, -5.0};
+
 				PositionAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
 				PositionAccessor.count         = VertexCount;
 				PositionAccessor.type          = TINYGLTF_TYPE_VEC3;
+				AccessorMinMax<glm::vec3>(
+					VertexData, VertexBufferView, PositionAccessor
+				);
 
 				GLTFModel.accessors.push_back(PositionAccessor);
 				VertexPositionAccessorIdx = GLTFModel.accessors.size() - 1;
@@ -340,11 +368,12 @@ public:
 				NormalAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
 				);
-				NormalAccessor.maxValues     = {+1.0, +1.0, +1.0};
-				NormalAccessor.minValues     = {-1.0, -1.0, -1.0};
 				NormalAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
 				NormalAccessor.count         = VertexCount;
 				NormalAccessor.type          = TINYGLTF_TYPE_VEC3;
+				AccessorMinMax<glm::vec3>(
+					VertexData, VertexBufferView, NormalAccessor
+				);
 
 				GLTFModel.accessors.push_back(NormalAccessor);
 				VertexNormalAccessorIdx = GLTFModel.accessors.size() - 1;
@@ -361,11 +390,12 @@ public:
 				TangentAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
 				);
-				TangentAccessor.maxValues     = {+1.0, +1.0, +1.0};
-				TangentAccessor.minValues     = {-1.0, -1.0, -1.0};
 				TangentAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
 				TangentAccessor.count         = VertexCount;
 				TangentAccessor.type          = TINYGLTF_TYPE_VEC3;
+				AccessorMinMax<glm::vec3>(
+					VertexData, VertexBufferView, TangentAccessor
+				);
 
 				GLTFModel.accessors.push_back(TangentAccessor);
 				VertexTangentAccessorIdx = GLTFModel.accessors.size() - 1;
@@ -381,11 +411,12 @@ public:
 				ColorAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
 				);
-				ColorAccessor.maxValues     = {+1.0, +1.0, +1.0, +1.0};
-				ColorAccessor.minValues     = {0.0, 0.0, 0.0, 0.0};
 				ColorAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
 				ColorAccessor.count         = VertexCount;
 				ColorAccessor.type          = TINYGLTF_TYPE_VEC4;
+				AccessorMinMax<glm::vec4>(
+					VertexData, VertexBufferView, ColorAccessor
+				);
 
 				GLTFModel.accessors.push_back(ColorAccessor);
 				VertexColorAccessorIdx = GLTFModel.accessors.size() - 1;
@@ -411,8 +442,6 @@ public:
 				WeightsAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
 				);
-				WeightsAccessor.maxValues     = {+1.0, +1.0, +1.0, +1.0};
-				WeightsAccessor.minValues     = {0.0, 0.0, 0.0, 0.0};
 				WeightsAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
 				WeightsAccessor.count         = VertexCount;
 				// switch( WeightCount )
@@ -432,6 +461,9 @@ public:
 				// }
 
 				WeightsAccessor.type = TINYGLTF_TYPE_VEC4;
+				AccessorMinMax<glm::vec4>(
+					VertexData, VertexBufferView, WeightsAccessor
+				);
 
 				GLTFModel.accessors.push_back(WeightsAccessor);
 				// VertexWeightsAccessorIdx = GLTFModel.accessors.size() -
@@ -449,11 +481,12 @@ public:
 				JointsAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
 				);
-				JointsAccessor.maxValues     = {+255.0, +255.0, +255.0, +255.0};
-				JointsAccessor.minValues     = {0.0, 0.0, 0.0, 0.0};
 				JointsAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
 				JointsAccessor.count         = VertexCount;
 				JointsAccessor.type          = TINYGLTF_TYPE_VEC4;
+				AccessorMinMax<glm::vec4>(
+					VertexData, VertexBufferView, JointsAccessor
+				);
 
 				GLTFModel.accessors.push_back(JointsAccessor);
 				// VertexJointsAccessorIdx = GLTFModel.accessors.size() - 1;
@@ -470,11 +503,12 @@ public:
 				TexCoordAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
 				);
-				TexCoordAccessor.maxValues     = {+1.0, +1.0};
-				TexCoordAccessor.minValues     = {0.0, 0.0};
 				TexCoordAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
 				TexCoordAccessor.count         = VertexCount;
 				TexCoordAccessor.type          = TINYGLTF_TYPE_VEC2;
+				AccessorMinMax<glm::vec2>(
+					VertexData, VertexBufferView, TexCoordAccessor
+				);
 
 				GLTFModel.accessors.push_back(TexCoordAccessor);
 				VertexTexCoordAccessorIdx = GLTFModel.accessors.size() - 1;
