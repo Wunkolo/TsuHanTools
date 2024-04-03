@@ -198,15 +198,14 @@ void AccessorMinMax(
 	T CurMin   = *reinterpret_cast<const T*>(VertexData.data());
 	T CurMax   = *reinterpret_cast<const T*>(VertexData.data());
 
-	for( std::size_t VertexIdx = 0; VertexIdx < Accessor.count; ++VertexIdx )
+	for( std::size_t VertexIdx = 1; VertexIdx < Accessor.count; ++VertexIdx )
 	{
-		const T& CurElement = *reinterpret_cast<const T*>(VertexData.data());
+		const T& CurElement = *reinterpret_cast<const T*>(
+			VertexData.data() + VertexIdx * VertexBufferView.byteStride
+		);
 
 		CurMin = glm::min(CurMin, CurElement);
 		CurMax = glm::max(CurMax, CurElement);
-
-		// Offset to next vertex
-		VertexData = VertexData.subspan(VertexBufferView.byteStride);
 	}
 
 	Accessor.minValues.assign(glm::begin(CurMin), glm::end(CurMin));
