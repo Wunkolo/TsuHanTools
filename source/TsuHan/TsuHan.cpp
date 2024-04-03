@@ -1041,6 +1041,7 @@ void HGMHandler(
 
 		FileData = FileData.subspan(CurChunk.Size);
 	}
+	Visitor.EndHGM();
 }
 
 void HGMToGLTF(
