@@ -326,6 +326,8 @@ public:
 			);
 
 			tinygltf::BufferView VertexBufferView;
+			VertexBufferView.name
+				= VertexBufferView.name + Header.Name + ": VertexBufferView";
 			VertexBufferView.buffer     = GLTFModel.buffers.size() - 1;
 			VertexBufferView.byteOffset = 0;
 			VertexBufferView.byteLength = VertexDataSize;
@@ -340,6 +342,8 @@ public:
 			{
 
 				tinygltf::Accessor PositionAccessor;
+				PositionAccessor.name
+					= PositionAccessor.name + Header.Name + ": Position";
 				PositionAccessor.bufferView = GLTFModel.bufferViews.size() - 1;
 				PositionAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
@@ -363,6 +367,8 @@ public:
 				Header.VertexAttributeMask & AttribMask )
 			{
 				tinygltf::Accessor NormalAccessor;
+				NormalAccessor.name
+					= NormalAccessor.name + Header.Name + ": Normal";
 				NormalAccessor.bufferView = GLTFModel.bufferViews.size() - 1;
 				NormalAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
@@ -385,6 +391,8 @@ public:
 				Header.VertexAttributeMask & AttribMask )
 			{
 				tinygltf::Accessor TangentAccessor;
+				TangentAccessor.name
+					= TangentAccessor.name + Header.Name + ": Tangent";
 				TangentAccessor.bufferView = GLTFModel.bufferViews.size() - 1;
 				TangentAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
@@ -406,6 +414,8 @@ public:
 				Header.VertexAttributeMask & AttribMask )
 			{
 				tinygltf::Accessor ColorAccessor;
+				ColorAccessor.name
+					= ColorAccessor.name + Header.Name + ": Color";
 				ColorAccessor.bufferView = GLTFModel.bufferViews.size() - 1;
 				ColorAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
@@ -437,6 +447,8 @@ public:
 				const std::size_t WeightCount
 					= std::popcount(Header.VertexAttributeMask & AttribMask);
 				tinygltf::Accessor WeightsAccessor;
+				WeightsAccessor.name
+					= WeightsAccessor.name + Header.Name + ": Weights";
 				WeightsAccessor.bufferView = GLTFModel.bufferViews.size() - 1;
 				WeightsAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
@@ -476,6 +488,8 @@ public:
 				Header.VertexAttributeMask & AttribMask )
 			{
 				tinygltf::Accessor JointsAccessor;
+				JointsAccessor.name
+					= JointsAccessor.name + Header.Name + ": Joints";
 				JointsAccessor.bufferView = GLTFModel.bufferViews.size() - 1;
 				JointsAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
@@ -498,6 +512,8 @@ public:
 				Header.VertexAttributeMask & AttribMask )
 			{
 				tinygltf::Accessor TexCoordAccessor;
+				TexCoordAccessor.name = TexCoordAccessor.name + Header.Name
+									  + ": TextureCoordinates";
 				TexCoordAccessor.bufferView = GLTFModel.bufferViews.size() - 1;
 				TexCoordAccessor.byteOffset = GetVertexBufferStride(
 					(AttribMask - 1) & Header.VertexAttributeMask
